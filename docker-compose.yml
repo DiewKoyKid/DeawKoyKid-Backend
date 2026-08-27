@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: deawkoykid-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deawkoykid
+      POSTGRES_PASSWORD: deawkoykid
+      POSTGRES_DB: deawkoykid
+    ports:
+      - "5432:5432"
+    volumes:
+      - deawkoykid-pgdata:/var/lib/postgresql/data
+
+volumes:
+  deawkoykid-pgdata:

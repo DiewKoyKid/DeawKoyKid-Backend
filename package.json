@@ -6,7 +6,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon server.js"
-
   },
   "repository": {
     "type": "git",
@@ -17,5 +16,15 @@
   "bugs": {
     "url": "https://github.com/sunvat-creator/DeawKoyKid-Backend/issues"
   },
-  "homepage": "https://github.com/sunvat-creator/DeawKoyKid-Backend#readme"
+  "homepage": "https://github.com/sunvat-creator/DeawKoyKid-Backend#readme",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^17.4.2",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "prisma": "^7.10.0"
+  }
 }

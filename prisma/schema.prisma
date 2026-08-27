@@ -1,0 +1,149 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String    @id @default(uuid())
+  username    String    @unique @db.VarChar(50)
+  password    String    @db.VarChar(255)
+  firstname   String    @db.VarChar(80)
+  lastname    String    @db.VarChar(80)
+  gender      String?   @db.Char(1)
+  bdate       DateTime? @db.Date
+  bankAccount String?   @db.VarChar(20)
+  phoneNumber String?   @db.VarChar(20)
+  instagram   String?   @db.VarChar(40)
+  line        String?   @db.VarChar(40)
+  facebook    String?   @db.VarChar(40)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  provider     Provider?
+  customer     Customer?
+  reports      Report[]
+  sentChatLogs ChatLog[] @relation("ChatLogSender")
+
+  @@map("users")
+}
+
+model Provider {
+  userId    String   @id
+  idCard    String?  @db.VarChar(13)
+  bio       String?
+  languages String?  @db.VarChar(200)
+  avgRating Decimal? @db.Decimal(3, 2)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  services Service[]
+
+  @@map("providers")
+}
+
+model Customer {
+  userId String @id
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+  reviews  Review[]
+
+  @@map("customers")
+}
+
+model Service {
+  id          String  @id @default(uuid())
+  providerId  String
+  title       String  @db.VarChar(150)
+  description String?
+  location    String  @db.VarChar(200)
+  rate        Decimal @db.Decimal(10, 2)
+
+  provider          Provider          @relation(fields: [providerId], references: [userId])
+  serviceCategories ServiceCategory[]
+  bookings          Booking[]
+
+  @@map("services")
+}
+
+model Category {
+  id       String @id @default(uuid())
+  category String @db.VarChar(100)
+
+  serviceCategories ServiceCategory[]
+
+  @@map("categories")
+}
+
+model ServiceCategory {
+  serviceId  String
+  categoryId String
+
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([serviceId, categoryId])
+  @@map("service_categories")
+}
+
+model Booking {
+  id              String   @id @default(uuid())
+  serviceId       String
+  customerId      String
+  bookingDate     DateTime @db.Date
+  appointmentDate DateTime @db.Date
+  bookingStatus   String   @db.VarChar(20)
+  duration        Int?
+
+  service  Service   @relation(fields: [serviceId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [userId])
+  reviews  Review[]
+  chatLogs ChatLog[]
+
+  @@map("bookings")
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  bookingId  String
+  customerId String
+  rating     Int
+  comment    String?
+  timestamp  DateTime
+
+  booking  Booking  @relation(fields: [bookingId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [userId])
+
+  @@map("reviews")
+}
+
+model Report {
+  id          String @id @default(uuid())
+  userId      String
+  topic       String @db.VarChar(150)
+  description String
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("reports")
+}
+
+model ChatLog {
+  id        String   @id @default(uuid())
+  bookingId String
+  senderId  String
+  content   String
+  timestamp DateTime
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+  sender  User    @relation("ChatLogSender", fields: [senderId], references: [id])
+
+  @@map("chat_logs")
+}
