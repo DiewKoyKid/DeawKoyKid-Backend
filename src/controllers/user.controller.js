@@ -2,7 +2,7 @@ const prisma = require("../lib/prisma");
 
 async function updateProfile(req, res, next) {
   try {
-    const currentUserId = req.user.userId; // Owner Check ดึง id จาก Token โดยตรง
+    const currentUserId = req.user.userId; // Owner check — id comes straight from the JWT
     const {
       firstname,
       lastname,
@@ -17,6 +17,33 @@ async function updateProfile(req, res, next) {
       languages,
     } = req.body;
 
+    if (gender && !["M", "F", "O"].includes(gender)) {
+      return res.status(400).json({ error: "gender must be M, F, or O" });
+    }
+
+    // Check whether this user actually has a Provider profile before
+    // attempting to update provider-only fields (bio/languages).
+    // Without this check, a Customer sending bio/languages would hit
+    // Prisma's "Record to update not found" error, since they have
+    // no related Provider row.
+    const existingUser = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { provider: { select: { userId: true } } },
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    const isProvider = !!existingUser.provider;
+    const wantsProviderFieldsUpdated = bio !== undefined || languages !== undefined;
+
+    if (wantsProviderFieldsUpdated && !isProvider) {
+      return res.status(400).json({
+        error: "bio and languages can only be updated on provider accounts",
+      });
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: currentUserId },
       data: {
@@ -29,9 +56,9 @@ async function updateProfile(req, res, next) {
         instagram,
         line,
         facebook,
-        provider: bio || languages ? {
-          update: { bio, languages }
-        } : undefined,
+        provider: wantsProviderFieldsUpdated
+          ? { update: { bio, languages } }
+          : undefined,
       },
       select: {
         id: true,
