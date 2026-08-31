@@ -20,7 +20,7 @@
   "homepage": "https://github.com/sunvat-creator/DeawKoyKid-Backend#readme",
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "6.19.3",
+    "@prisma/client": "^7.10.0",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.4.2",
@@ -30,6 +30,6 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.7",
-    "prisma": "6.19.3"
+    "prisma": "^7.10.0"
   }
 }
