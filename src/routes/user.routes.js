@@ -5,4 +5,7 @@ const { authenticateToken } = require("../middlewares/auth.middleware");
 
 router.put("/me", authenticateToken, userController.updateProfile);
 
+// Public — no authenticateToken. Anyone can browse a profile before booking.
+router.get("/:id", userController.getPublicProfile);
+
 module.exports = router;

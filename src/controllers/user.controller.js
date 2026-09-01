@@ -82,4 +82,45 @@ async function updateProfile(req, res, next) {
   }
 }
 
-module.exports = { updateProfile };
+async function getPublicProfile(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    // Explicit whitelist select — only fields safe to expose publicly.
+    // password, bankAccount, phoneNumber (User) and idCard,
+    // emergencyContactName, emergencyContactPhone, status (Provider)
+    // are intentionally never selected here, not just filtered out
+    // afterward, so a future field added to the schema can't leak
+    // by accident.
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        username: true,
+        firstname: true,
+        lastname: true,
+        gender: true,
+        instagram: true,
+        line: true,
+        facebook: true,
+        provider: {
+          select: {
+            bio: true,
+            languages: true,
+            avgRating: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    return res.status(200).json({ user });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { updateProfile, getPublicProfile };
