@@ -21,26 +21,22 @@ async function register(req, res, next) {
       facebook,
     } = req.body;
 
-    // Required-field validation
     if (!username || !password || !firstname || !lastname) {
       return res.status(400).json({
         error: "username, password, firstname, and lastname are required",
       });
     }
 
-    // Password strength check
     if (password.length < 8) {
       return res.status(400).json({
         error: "password must be at least 8 characters",
       });
     }
 
-    // Optional: basic gender check to match schema's Char(1)
     if (gender && !["M", "F", "O"].includes(gender)) {
       return res.status(400).json({ error: "gender must be M, F, or O" });
     }
 
-    // Check for duplicate username
     const existingUser = await prisma.user.findUnique({ where: { username } });
     if (existingUser) {
       return res.status(409).json({ error: "username already taken" });
@@ -78,6 +74,108 @@ async function register(req, res, next) {
   }
 }
 
+async function registerProvider(req, res, next) {
+  try {
+    const {
+      username,
+      password,
+      firstname,
+      lastname,
+      gender,
+      bdate,
+      bankAccount,
+      phoneNumber,
+      instagram,
+      line,
+      facebook,
+      idCard,
+      bio,
+      languages,
+      emergencyContactName,
+      emergencyContactPhone,
+    } = req.body;
+
+    // Required-field validation — same base fields as customer registration,
+    // plus idCard, which is required to identify a Provider per the final report
+    if (!username || !password || !firstname || !lastname) {
+      return res.status(400).json({
+        error: "username, password, firstname, and lastname are required",
+      });
+    }
+
+    if (!idCard) {
+      return res.status(400).json({ error: "idCard is required for provider registration" });
+    }
+
+    if (!/^\d{13}$/.test(idCard)) {
+      return res.status(400).json({ error: "idCard must be exactly 13 digits" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        error: "password must be at least 8 characters",
+      });
+    }
+
+    if (gender && !["M", "F", "O"].includes(gender)) {
+      return res.status(400).json({ error: "gender must be M, F, or O" });
+    }
+
+    const existingUser = await prisma.user.findUnique({ where: { username } });
+    if (existingUser) {
+      return res.status(409).json({ error: "username already taken" });
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    // status defaults to "PENDING" via the schema — not set explicitly here,
+    // so approval workflow (Admin flipping it to APPROVED) stays a separate concern
+    const user = await prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        firstname,
+        lastname,
+        gender,
+        bdate: bdate ? new Date(bdate) : undefined,
+        bankAccount,
+        phoneNumber,
+        instagram,
+        line,
+        facebook,
+        provider: {
+          create: {
+            idCard,
+            bio,
+            languages,
+            emergencyContactName,
+            emergencyContactPhone,
+          },
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        firstname: true,
+        lastname: true,
+        createdAt: true,
+        provider: {
+          select: {
+            status: true,
+            idCard: true,
+            bio: true,
+            languages: true,
+          },
+        },
+      },
+    });
+
+    return res.status(201).json({ user });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function login(req, res, next) {
   try {
     const { username, password } = req.body;
@@ -88,7 +186,6 @@ async function login(req, res, next) {
 
     const user = await prisma.user.findUnique({ where: { username } });
 
-    // Same error for "no such user" and "wrong password" — don't leak which one it was
     if (!user) {
       return res.status(401).json({ error: "invalid username or password" });
     }
@@ -102,7 +199,7 @@ async function login(req, res, next) {
 
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // requires HTTPS in prod, allows plain HTTP in local dev
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: COOKIE_MAX_AGE_MS,
     });
@@ -120,4 +217,4 @@ async function login(req, res, next) {
   }
 }
 
-module.exports = { register, login };
+module.exports = { register, registerProvider, login };
