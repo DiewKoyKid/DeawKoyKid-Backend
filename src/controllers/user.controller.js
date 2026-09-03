@@ -1,9 +1,11 @@
 const prisma = require("../lib/prisma");
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function updateProfile(req, res, next) {
   try {
     const currentUserId = req.user.userId; // Owner check — id comes straight from the JWT
     const {
+      email,
       firstname,
       lastname,
       gender,
@@ -21,6 +23,11 @@ async function updateProfile(req, res, next) {
       return res.status(400).json({ error: "gender must be M, F, or O" });
     }
 
+    const normalizedEmail = email !== undefined ? email.trim().toLowerCase() : undefined;
+    if (email !== undefined && !EMAIL_PATTERN.test(normalizedEmail)) {
+      return res.status(400).json({ error: "email must be a valid email address" });
+    }
+
     // Check whether this user actually has a Provider profile before
     // attempting to update provider-only fields (bio/languages).
     // Without this check, a Customer sending bio/languages would hit
@@ -35,6 +42,17 @@ async function updateProfile(req, res, next) {
       return res.status(404).json({ error: "user not found" });
     }
 
+    if (normalizedEmail !== undefined) {
+      const emailOwner = await prisma.user.findFirst({
+        where: { email: normalizedEmail, NOT: { id: currentUserId } },
+        select: { id: true },
+      });
+
+      if (emailOwner) {
+        return res.status(409).json({ error: "email already taken" });
+      }
+    }
+
     const isProvider = !!existingUser.provider;
     const wantsProviderFieldsUpdated = bio !== undefined || languages !== undefined;
 
@@ -47,6 +65,7 @@ async function updateProfile(req, res, next) {
     const updatedUser = await prisma.user.update({
       where: { id: currentUserId },
       data: {
+        email: normalizedEmail,
         firstname,
         lastname,
         gender,
@@ -63,6 +82,7 @@ async function updateProfile(req, res, next) {
       select: {
         id: true,
         username: true,
+        email: true,
         firstname: true,
         lastname: true,
         gender: true,
@@ -97,6 +117,7 @@ async function getPublicProfile(req, res, next) {
       select: {
         id: true,
         username: true,
+        email: true,
         firstname: true,
         lastname: true,
         gender: true,

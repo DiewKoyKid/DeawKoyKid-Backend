@@ -4,11 +4,17 @@ const { signToken } = require("../utils/jwt");
 
 const COOKIE_NAME = "token";
 const COOKIE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes, matches JWT_EXPIRES_IN default
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function normalizeEmail(email) {
+  return email.trim().toLowerCase();
+}
 
 async function register(req, res, next) {
   try {
     const {
       username,
+      email,
       password,
       firstname,
       lastname,
@@ -21,10 +27,15 @@ async function register(req, res, next) {
       facebook,
     } = req.body;
 
-    if (!username || !password || !firstname || !lastname) {
+    if (!username || !email || !password || !firstname || !lastname) {
       return res.status(400).json({
-        error: "username, password, firstname, and lastname are required",
+        error: "username, email, password, firstname, and lastname are required",
       });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      return res.status(400).json({ error: "email must be a valid email address" });
     }
 
     if (password.length < 8) {
@@ -37,9 +48,15 @@ async function register(req, res, next) {
       return res.status(400).json({ error: "gender must be M, F, or O" });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { username } });
+    const existingUser = await prisma.user.findFirst({
+      where: { OR: [{ username }, { email: normalizedEmail }] },
+      select: { username: true, email: true },
+    });
     if (existingUser) {
-      return res.status(409).json({ error: "username already taken" });
+      const error = existingUser.username === username
+        ? "username already taken"
+        : "email already taken";
+      return res.status(409).json({ error });
     }
 
     const hashedPassword = await hashPassword(password);
@@ -47,6 +64,7 @@ async function register(req, res, next) {
     const user = await prisma.user.create({
       data: {
         username,
+        email: normalizedEmail,
         password: hashedPassword,
         firstname,
         lastname,
@@ -62,6 +80,7 @@ async function register(req, res, next) {
       select: {
         id: true,
         username: true,
+        email: true,
         firstname: true,
         lastname: true,
         createdAt: true,
@@ -78,6 +97,7 @@ async function registerProvider(req, res, next) {
   try {
     const {
       username,
+      email,
       password,
       firstname,
       lastname,
@@ -97,10 +117,15 @@ async function registerProvider(req, res, next) {
 
     // Required-field validation — same base fields as customer registration,
     // plus idCard, which is required to identify a Provider per the final report
-    if (!username || !password || !firstname || !lastname) {
+    if (!username || !email || !password || !firstname || !lastname) {
       return res.status(400).json({
-        error: "username, password, firstname, and lastname are required",
+        error: "username, email, password, firstname, and lastname are required",
       });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      return res.status(400).json({ error: "email must be a valid email address" });
     }
 
     if (!idCard) {
@@ -121,9 +146,15 @@ async function registerProvider(req, res, next) {
       return res.status(400).json({ error: "gender must be M, F, or O" });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { username } });
+    const existingUser = await prisma.user.findFirst({
+      where: { OR: [{ username }, { email: normalizedEmail }] },
+      select: { username: true, email: true },
+    });
     if (existingUser) {
-      return res.status(409).json({ error: "username already taken" });
+      const error = existingUser.username === username
+        ? "username already taken"
+        : "email already taken";
+      return res.status(409).json({ error });
     }
 
     const hashedPassword = await hashPassword(password);
@@ -133,6 +164,7 @@ async function registerProvider(req, res, next) {
     const user = await prisma.user.create({
       data: {
         username,
+        email: normalizedEmail,
         password: hashedPassword,
         firstname,
         lastname,
@@ -156,6 +188,7 @@ async function registerProvider(req, res, next) {
       select: {
         id: true,
         username: true,
+        email: true,
         firstname: true,
         lastname: true,
         createdAt: true,
@@ -178,21 +211,29 @@ async function registerProvider(req, res, next) {
 
 async function login(req, res, next) {
   try {
-    const { username, password } = req.body;
+    const { email, username, password } = req.body;
+    const normalizedEmail = email ? normalizeEmail(email) : null;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: "username and password are required" });
+    if ((!normalizedEmail && !username) || !password) {
+      return res.status(400).json({ error: "email and password are required" });
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    if (normalizedEmail && !EMAIL_PATTERN.test(normalizedEmail)) {
+      return res.status(400).json({ error: "email must be a valid email address" });
+    }
+
+    // Preserve username login for legacy accounts that do not have an email yet.
+    const user = await prisma.user.findUnique({
+      where: normalizedEmail ? { email: normalizedEmail } : { username },
+    });
 
     if (!user) {
-      return res.status(401).json({ error: "invalid username or password" });
+      return res.status(401).json({ error: "invalid email or password" });
     }
 
     const passwordMatches = await comparePassword(password, user.password);
     if (!passwordMatches) {
-      return res.status(401).json({ error: "invalid username or password" });
+      return res.status(401).json({ error: "invalid email or password" });
     }
 
     const token = signToken({ userId: user.id });
@@ -208,6 +249,7 @@ async function login(req, res, next) {
       user: {
         id: user.id,
         username: user.username,
+        email: user.email,
         firstname: user.firstname,
         lastname: user.lastname,
       },
