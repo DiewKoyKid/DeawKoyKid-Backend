@@ -1,6 +1,39 @@
 const prisma = require("../lib/prisma");
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+async function getMyProfile(req, res, next) {
+  try {
+    const currentUserId = req.user.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        firstname: true,
+        lastname: true,
+        gender: true,
+        bdate: true,
+        bankAccount: true,
+        phoneNumber: true,
+        instagram: true,
+        line: true,
+        facebook: true,
+        provider: { select: { bio: true, languages: true } },
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    return res.status(200).json({ user });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function updateProfile(req, res, next) {
   try {
     const currentUserId = req.user.userId; // Owner check — id comes straight from the JWT
@@ -144,4 +177,4 @@ async function getPublicProfile(req, res, next) {
   }
 }
 
-module.exports = { updateProfile, getPublicProfile };
+module.exports = { getMyProfile, updateProfile, getPublicProfile };

@@ -25,11 +25,18 @@ async function register(req, res, next) {
       instagram,
       line,
       facebook,
+      consent,
     } = req.body;
 
     if (!username || !email || !password || !firstname || !lastname) {
       return res.status(400).json({
         error: "username, email, password, firstname, and lastname are required",
+      });
+    }
+
+    if (consent !== true) {
+      return res.status(400).json({
+        error: "consent to the privacy policy is required to register",
       });
     }
 
@@ -75,6 +82,7 @@ async function register(req, res, next) {
         instagram,
         line,
         facebook,
+        consentAt: new Date(),
         customer: { create: {} }, // links the 1:1 Customer row automatically
       },
       select: {
@@ -113,6 +121,7 @@ async function registerProvider(req, res, next) {
       languages,
       emergencyContactName,
       emergencyContactPhone,
+      consent,
     } = req.body;
 
     // Required-field validation — same base fields as customer registration,
@@ -120,6 +129,12 @@ async function registerProvider(req, res, next) {
     if (!username || !email || !password || !firstname || !lastname) {
       return res.status(400).json({
         error: "username, email, password, firstname, and lastname are required",
+      });
+    }
+
+    if (consent !== true) {
+      return res.status(400).json({
+        error: "consent to the privacy policy is required to register",
       });
     }
 
@@ -175,6 +190,7 @@ async function registerProvider(req, res, next) {
         instagram,
         line,
         facebook,
+        consentAt: new Date(),
         provider: {
           create: {
             idCard,
@@ -259,4 +275,14 @@ async function login(req, res, next) {
   }
 }
 
-module.exports = { register, registerProvider, login };
+function logout(req, res) {
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  });
+
+  return res.status(200).json({ message: "logged out" });
+}
+
+module.exports = { register, registerProvider, login, logout };
