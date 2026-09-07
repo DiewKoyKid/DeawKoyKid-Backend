@@ -159,6 +159,30 @@ describe("POST /api/auth/login", () => {
     expect(tokenCookie).toMatch(/HttpOnly/i);
   });
 
+  it("reports the CUSTOMER role for a customer account", async () => {
+    const payload = await registerUser();
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ email: payload.email, password: payload.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.role).toBe("CUSTOMER");
+  });
+
+  it("reports the PROVIDER role for a provider account", async () => {
+    const payload = uniqueUser("login_provider");
+    payload.idCard = "1112223334445";
+    await request(app).post("/api/auth/register/provider").send(payload);
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ email: payload.email, password: payload.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.role).toBe("PROVIDER");
+  });
+
   it("rejects an unknown email", async () => {
     const res = await request(app)
       .post("/api/auth/login")

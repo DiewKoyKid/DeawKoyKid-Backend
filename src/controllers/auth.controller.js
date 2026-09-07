@@ -241,6 +241,8 @@ async function login(req, res, next) {
     // Preserve username login for legacy accounts that do not have an email yet.
     const user = await prisma.user.findUnique({
       where: normalizedEmail ? { email: normalizedEmail } : { username },
+      // Needed to tell the client which dashboard this account belongs to
+      include: { provider: { select: { userId: true } } },
     });
 
     if (!user) {
@@ -268,6 +270,7 @@ async function login(req, res, next) {
         email: user.email,
         firstname: user.firstname,
         lastname: user.lastname,
+        role: user.provider ? "PROVIDER" : "CUSTOMER",
       },
     });
   } catch (err) {
