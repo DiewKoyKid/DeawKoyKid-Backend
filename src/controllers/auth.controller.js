@@ -201,6 +201,9 @@ async function registerProvider(req, res, next) {
             emergencyContactPhone,
           },
         },
+        // Providers can book trips of their own, so they get a customer
+        // profile too rather than needing a second account for it
+        customer: { create: {} },
       },
       select: {
         id: true,
