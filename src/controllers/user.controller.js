@@ -1,5 +1,68 @@
 const prisma = require("../lib/prisma");
+const { rolesFor } = require("../utils/roles");
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Adds the second profile to an account that already exists, so someone who
+// books trips can also start guiding them without a separate login.
+async function addProviderProfile(req, res, next) {
+  try {
+    const currentUserId = req.user.userId;
+    const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = req.body;
+
+    if (!idCard) {
+      return res.status(400).json({ error: "idCard is required for provider registration" });
+    }
+
+    if (!/^\d{13}$/.test(idCard)) {
+      return res.status(400).json({ error: "idCard must be exactly 13 digits" });
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { provider: { select: { userId: true } } },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    if (existing.provider) {
+      return res.status(409).json({ error: "this account already has a provider profile" });
+    }
+
+    // status defaults to PENDING via the schema, same as provider registration
+    const user = await prisma.user.update({
+      where: { id: currentUserId },
+      data: {
+        provider: {
+          create: { idCard, bio, languages, emergencyContactName, emergencyContactPhone },
+        },
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        firstname: true,
+        lastname: true,
+        customer: { select: { userId: true } },
+        provider: { select: { userId: true, status: true } },
+      },
+    });
+
+    return res.status(201).json({
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        roles: rolesFor(user),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
 
 async function getMyProfile(req, res, next) {
   try {
@@ -177,4 +240,4 @@ async function getPublicProfile(req, res, next) {
   }
 }
 
-module.exports = { getMyProfile, updateProfile, getPublicProfile };
+module.exports = { getMyProfile, updateProfile, getPublicProfile, addProviderProfile };

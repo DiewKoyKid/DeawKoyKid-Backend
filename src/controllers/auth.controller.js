@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const { hashPassword, comparePassword } = require("../utils/hash");
 const { signToken } = require("../utils/jwt");
+const { rolesFor } = require("../utils/roles");
 
 const COOKIE_NAME = "token";
 const COOKIE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes, matches JWT_EXPIRES_IN default
@@ -231,18 +232,22 @@ async function login(req, res, next) {
     const normalizedEmail = email ? normalizeEmail(email) : null;
 
     if ((!normalizedEmail && !username) || !password) {
-      return res.status(400).json({ error: "email and password are required" });
+      return res.status(400).json({
+        error: "a username or email, and a password, are required",
+      });
     }
 
     if (normalizedEmail && !EMAIL_PATTERN.test(normalizedEmail)) {
       return res.status(400).json({ error: "email must be a valid email address" });
     }
 
-    // Preserve username login for legacy accounts that do not have an email yet.
     const user = await prisma.user.findUnique({
       where: normalizedEmail ? { email: normalizedEmail } : { username },
-      // Needed to tell the client which dashboard this account belongs to
-      include: { provider: { select: { userId: true } } },
+      // Needed to tell the client which dashboards this account can reach
+      include: {
+        provider: { select: { userId: true } },
+        customer: { select: { userId: true } },
+      },
     });
 
     if (!user) {
@@ -270,7 +275,7 @@ async function login(req, res, next) {
         email: user.email,
         firstname: user.firstname,
         lastname: user.lastname,
-        role: user.provider ? "PROVIDER" : "CUSTOMER",
+        roles: rolesFor(user),
       },
     });
   } catch (err) {

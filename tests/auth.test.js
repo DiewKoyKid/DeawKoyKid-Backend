@@ -167,7 +167,7 @@ describe("POST /api/auth/login", () => {
       .send({ email: payload.email, password: payload.password });
 
     expect(res.status).toBe(200);
-    expect(res.body.user.role).toBe("CUSTOMER");
+    expect(res.body.user.roles).toEqual(["CUSTOMER"]);
   });
 
   it("reports the PROVIDER role for a provider account", async () => {
@@ -180,7 +180,34 @@ describe("POST /api/auth/login", () => {
       .send({ email: payload.email, password: payload.password });
 
     expect(res.status).toBe(200);
-    expect(res.body.user.role).toBe("PROVIDER");
+    expect(res.body.user.roles).toEqual(["PROVIDER"]);
+  });
+
+  it("logs in with a username instead of an email", async () => {
+    const payload = await registerUser();
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ username: payload.username, password: payload.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.username).toBe(payload.username);
+  });
+
+  it("rejects the wrong password when logging in by username", async () => {
+    const payload = await registerUser();
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ username: payload.username, password: "wrong-password" });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a login with neither a username nor an email", async () => {
+    const res = await request(app).post("/api/auth/login").send({ password: "whatever123" });
+
+    expect(res.status).toBe(400);
   });
 
   it("rejects an unknown email", async () => {
