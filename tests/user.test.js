@@ -78,6 +78,75 @@ describe("PUT /api/users/me", () => {
   });
 });
 
+describe("POST /api/users/me/provider", () => {
+  it("rejects an unauthenticated request", async () => {
+    const res = await request(app)
+      .post("/api/users/me/provider")
+      .send({ idCard: "1234567890123" });
+    expect(res.status).toBe(401);
+  });
+
+  it("adds a provider profile to a customer account, giving it both roles", async () => {
+    const agent = request.agent(app);
+    const payload = uniqueUser("both_roles");
+    await registerAndLogin(agent, payload);
+
+    const res = await agent
+      .post("/api/users/me/provider")
+      .send({ idCard: "1234567890123", languages: "English, Thai" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.user.roles).toEqual(["CUSTOMER", "PROVIDER"]);
+
+    // and the roles persist across a fresh login
+    const login = await request(app)
+      .post("/api/auth/login")
+      .send({ email: payload.email, password: payload.password });
+    expect(login.body.user.roles).toEqual(["CUSTOMER", "PROVIDER"]);
+  });
+
+  it("rejects a missing idCard", async () => {
+    const agent = request.agent(app);
+    await registerAndLogin(agent, uniqueUser("add_prov_no_id"));
+
+    const res = await agent.post("/api/users/me/provider").send({ languages: "English" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/idCard/i);
+  });
+
+  it("rejects an idCard that is not 13 digits", async () => {
+    const agent = request.agent(app);
+    await registerAndLogin(agent, uniqueUser("add_prov_bad_id"));
+
+    const res = await agent.post("/api/users/me/provider").send({ idCard: "123" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/13 digits/i);
+  });
+
+  it("refuses to add a second provider profile", async () => {
+    const agent = request.agent(app);
+    await registerAndLogin(agent, uniqueUser("add_prov_twice"));
+
+    await agent.post("/api/users/me/provider").send({ idCard: "1234567890123" });
+    const res = await agent.post("/api/users/me/provider").send({ idCard: "1234567890123" });
+
+    expect(res.status).toBe(409);
+  });
+
+  it("lets the newly added provider profile update provider-only fields", async () => {
+    const agent = request.agent(app);
+    await registerAndLogin(agent, uniqueUser("add_prov_then_edit"));
+    await agent.post("/api/users/me/provider").send({ idCard: "1234567890123" });
+
+    const res = await agent.put("/api/users/me").send({ bio: "Now guiding trips too" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.provider.bio).toBe("Now guiding trips too");
+  });
+});
+
 describe("GET /api/users/:id", () => {
   it("returns only public fields", async () => {
     const agent = request.agent(app);

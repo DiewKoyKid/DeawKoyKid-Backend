@@ -159,6 +159,57 @@ describe("POST /api/auth/login", () => {
     expect(tokenCookie).toMatch(/HttpOnly/i);
   });
 
+  it("reports the CUSTOMER role for a customer account", async () => {
+    const payload = await registerUser();
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ email: payload.email, password: payload.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.roles).toEqual(["CUSTOMER"]);
+  });
+
+  it("gives a provider account both roles, since providers can book trips too", async () => {
+    const payload = uniqueUser("login_provider");
+    payload.idCard = "1112223334445";
+    await request(app).post("/api/auth/register/provider").send(payload);
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ email: payload.email, password: payload.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.roles).toEqual(["CUSTOMER", "PROVIDER"]);
+  });
+
+  it("logs in with a username instead of an email", async () => {
+    const payload = await registerUser();
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ username: payload.username, password: payload.password });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.username).toBe(payload.username);
+  });
+
+  it("rejects the wrong password when logging in by username", async () => {
+    const payload = await registerUser();
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .send({ username: payload.username, password: "wrong-password" });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a login with neither a username nor an email", async () => {
+    const res = await request(app).post("/api/auth/login").send({ password: "whatever123" });
+
+    expect(res.status).toBe(400);
+  });
+
   it("rejects an unknown email", async () => {
     const res = await request(app)
       .post("/api/auth/login")
