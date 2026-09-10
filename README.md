@@ -18,7 +18,7 @@ Backend RESTful API service สำหรับระบบค้นหาแล�
 
 ### Prerequisites
 * Node.js (v18.x หรือสูงกว่า)
-* PostgreSQL (v14.x หรือสูงกว่า)
+* Docker Desktop (ใช้รัน PostgreSQL ผ่าน Docker Compose — ต้องเปิดไว้ก่อนใช้งาน)
 * npm หรือ yarn
 
 ### Installation & Running
@@ -26,3 +26,6 @@ Backend RESTful API service สำหรับระบบค้นหาแล�
    ```bash
    git clone <BACKEND_REPOSITORY_URL>
    cd <REPOSITORY_NAME>
+   ```
+
+ดูขั้นตอนที่เหลือ (ติดตั้ง dependencies, ตั้งค่า `.env`, เปิด PostgreSQL, รัน migration, สตาร์ทเซิร์ฟเวอร์) ได้ที่ [SETUP.md](./SETUP.md)
