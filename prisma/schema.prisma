@@ -25,6 +25,7 @@ model User {
   instagram   String?   @db.VarChar(40)
   line        String?   @db.VarChar(40)
   facebook    String?   @db.VarChar(40)
+  consentAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 

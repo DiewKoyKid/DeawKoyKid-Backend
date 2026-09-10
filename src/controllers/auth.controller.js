@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const { hashPassword, comparePassword } = require("../utils/hash");
 const { signToken } = require("../utils/jwt");
+const { rolesFor } = require("../utils/roles");
 
 const COOKIE_NAME = "token";
 const COOKIE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes, matches JWT_EXPIRES_IN default
@@ -25,11 +26,18 @@ async function register(req, res, next) {
       instagram,
       line,
       facebook,
+      consent,
     } = req.body;
 
     if (!username || !email || !password || !firstname || !lastname) {
       return res.status(400).json({
         error: "username, email, password, firstname, and lastname are required",
+      });
+    }
+
+    if (consent !== true) {
+      return res.status(400).json({
+        error: "consent to the privacy policy is required to register",
       });
     }
 
@@ -75,6 +83,7 @@ async function register(req, res, next) {
         instagram,
         line,
         facebook,
+        consentAt: new Date(),
         customer: { create: {} }, // links the 1:1 Customer row automatically
       },
       select: {
@@ -113,6 +122,7 @@ async function registerProvider(req, res, next) {
       languages,
       emergencyContactName,
       emergencyContactPhone,
+      consent,
     } = req.body;
 
     // Required-field validation — same base fields as customer registration,
@@ -120,6 +130,12 @@ async function registerProvider(req, res, next) {
     if (!username || !email || !password || !firstname || !lastname) {
       return res.status(400).json({
         error: "username, email, password, firstname, and lastname are required",
+      });
+    }
+
+    if (consent !== true) {
+      return res.status(400).json({
+        error: "consent to the privacy policy is required to register",
       });
     }
 
@@ -175,6 +191,7 @@ async function registerProvider(req, res, next) {
         instagram,
         line,
         facebook,
+        consentAt: new Date(),
         provider: {
           create: {
             idCard,
@@ -184,6 +201,9 @@ async function registerProvider(req, res, next) {
             emergencyContactPhone,
           },
         },
+        // Providers can book trips of their own, so they get a customer
+        // profile too rather than needing a second account for it
+        customer: { create: {} },
       },
       select: {
         id: true,
@@ -215,16 +235,22 @@ async function login(req, res, next) {
     const normalizedEmail = email ? normalizeEmail(email) : null;
 
     if ((!normalizedEmail && !username) || !password) {
-      return res.status(400).json({ error: "email and password are required" });
+      return res.status(400).json({
+        error: "a username or email, and a password, are required",
+      });
     }
 
     if (normalizedEmail && !EMAIL_PATTERN.test(normalizedEmail)) {
       return res.status(400).json({ error: "email must be a valid email address" });
     }
 
-    // Preserve username login for legacy accounts that do not have an email yet.
     const user = await prisma.user.findUnique({
       where: normalizedEmail ? { email: normalizedEmail } : { username },
+      // Needed to tell the client which dashboards this account can reach
+      include: {
+        provider: { select: { userId: true } },
+        customer: { select: { userId: true } },
+      },
     });
 
     if (!user) {
@@ -252,6 +278,7 @@ async function login(req, res, next) {
         email: user.email,
         firstname: user.firstname,
         lastname: user.lastname,
+        roles: rolesFor(user),
       },
     });
   } catch (err) {
@@ -259,4 +286,14 @@ async function login(req, res, next) {
   }
 }
 
-module.exports = { register, registerProvider, login };
+function logout(req, res) {
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+  });
+
+  return res.status(200).json({ message: "logged out" });
+}
+
+module.exports = { register, registerProvider, login, logout };
