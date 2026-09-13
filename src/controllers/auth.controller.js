@@ -6,6 +6,7 @@ const { rolesFor } = require("../utils/roles");
 const COOKIE_NAME = "token";
 const COOKIE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes, matches JWT_EXPIRES_IN default
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_PATTERN = /^0\d{9}$/;
 
 function normalizeEmail(email) {
   return email.trim().toLowerCase();
@@ -54,6 +55,10 @@ async function register(req, res, next) {
 
     if (gender && !["M", "F", "O"].includes(gender)) {
       return res.status(400).json({ error: "gender must be M, F, or O" });
+    }
+
+    if (phoneNumber && !PHONE_PATTERN.test(phoneNumber)) {
+      return res.status(400).json({ error: "phoneNumber must be 10 digits starting with 0" });
     }
 
     const existingUser = await prisma.user.findFirst({
@@ -160,6 +165,16 @@ async function registerProvider(req, res, next) {
 
     if (gender && !["M", "F", "O"].includes(gender)) {
       return res.status(400).json({ error: "gender must be M, F, or O" });
+    }
+
+    if (phoneNumber && !PHONE_PATTERN.test(phoneNumber)) {
+      return res.status(400).json({ error: "phoneNumber must be 10 digits starting with 0" });
+    }
+
+    if (emergencyContactPhone && !PHONE_PATTERN.test(emergencyContactPhone)) {
+      return res.status(400).json({
+        error: "emergencyContactPhone must be 10 digits starting with 0",
+      });
     }
 
     const existingUser = await prisma.user.findFirst({
