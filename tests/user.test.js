@@ -76,6 +76,16 @@ describe("PUT /api/users/me", () => {
 
     expect(res.status).toBe(400);
   });
+
+  it("rejects a phoneNumber that isn't a valid Thai number", async () => {
+    const agent = request.agent(app);
+    await registerAndLogin(agent, uniqueUser("profile_bad_phone"));
+
+    const res = await agent.put("/api/users/me").send({ phoneNumber: "abc123" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/phoneNumber/i);
+  });
 });
 
 describe("POST /api/users/me/provider", () => {
@@ -123,6 +133,18 @@ describe("POST /api/users/me/provider", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/13 digits/i);
+  });
+
+  it("rejects an emergencyContactPhone that isn't a valid Thai number", async () => {
+    const agent = request.agent(app);
+    await registerAndLogin(agent, uniqueUser("add_prov_bad_emergency_phone"));
+
+    const res = await agent
+      .post("/api/users/me/provider")
+      .send({ idCard: "1234567890123", emergencyContactPhone: "999" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/emergencyContactPhone/i);
   });
 
   it("refuses to add a second provider profile", async () => {
