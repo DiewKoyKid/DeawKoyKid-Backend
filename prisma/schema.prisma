@@ -14,6 +14,7 @@ datasource db {
 model User {
   id          String    @id @default(uuid())
   username    String    @unique @db.VarChar(50)
+  email       String?   @unique @db.VarChar(254)
   password    String    @db.VarChar(255)
   firstname   String    @db.VarChar(80)
   lastname    String    @db.VarChar(80)
@@ -24,6 +25,7 @@ model User {
   instagram   String?   @db.VarChar(40)
   line        String?   @db.VarChar(40)
   facebook    String?   @db.VarChar(40)
+  consentAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -36,11 +38,14 @@ model User {
 }
 
 model Provider {
-  userId    String   @id
-  idCard    String?  @db.VarChar(13)
-  bio       String?
-  languages String?  @db.VarChar(200)
-  avgRating Decimal? @db.Decimal(3, 2)
+  userId                String   @id
+  idCard                String?  @db.VarChar(13)
+  bio                   String?
+  languages             String?  @db.VarChar(200)
+  avgRating             Decimal? @db.Decimal(3, 2)
+  emergencyContactName  String?  @db.VarChar(80)
+  emergencyContactPhone String?  @db.VarChar(20)
+  status                String   @default("PENDING") @db.VarChar(20)
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   services Service[]
