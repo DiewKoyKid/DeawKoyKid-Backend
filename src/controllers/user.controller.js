@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const { rolesFor } = require("../utils/roles");
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_PATTERN = /^0\d{9}$/;
 
 // Adds the second profile to an account that already exists, so someone who
 // books trips can also start guiding them without a separate login.
@@ -15,6 +16,12 @@ async function addProviderProfile(req, res, next) {
 
     if (!/^\d{13}$/.test(idCard)) {
       return res.status(400).json({ error: "idCard must be exactly 13 digits" });
+    }
+
+    if (emergencyContactPhone && !PHONE_PATTERN.test(emergencyContactPhone)) {
+      return res.status(400).json({
+        error: "emergencyContactPhone must be 10 digits starting with 0",
+      });
     }
 
     const existing = await prisma.user.findUnique({
@@ -117,6 +124,10 @@ async function updateProfile(req, res, next) {
 
     if (gender && !["M", "F", "O"].includes(gender)) {
       return res.status(400).json({ error: "gender must be M, F, or O" });
+    }
+
+    if (phoneNumber && !PHONE_PATTERN.test(phoneNumber)) {
+      return res.status(400).json({ error: "phoneNumber must be 10 digits starting with 0" });
     }
 
     const normalizedEmail = email !== undefined ? email.trim().toLowerCase() : undefined;

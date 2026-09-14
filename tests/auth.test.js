@@ -70,6 +70,16 @@ describe("POST /api/auth/register", () => {
     expect(res.body.error).toMatch(/password/i);
   });
 
+  it("rejects a phoneNumber that isn't a valid Thai number", async () => {
+    const payload = uniqueUser("register_bad_phone");
+    payload.phoneNumber = "12345";
+
+    const res = await request(app).post("/api/auth/register").send(payload);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/phoneNumber/i);
+  });
+
   it("rejects a duplicate username", async () => {
     const payload = uniqueUser("register_dup_username");
     await request(app).post("/api/auth/register").send(payload);
@@ -133,6 +143,17 @@ describe("POST /api/auth/register/provider", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/consent/i);
+  });
+
+  it("rejects an emergencyContactPhone that isn't a valid Thai number", async () => {
+    const payload = uniqueUser("register_provider_bad_emergency_phone");
+    payload.idCard = "1231231231231";
+    payload.emergencyContactPhone = "not-a-phone";
+
+    const res = await request(app).post("/api/auth/register/provider").send(payload);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/emergencyContactPhone/i);
   });
 });
 
