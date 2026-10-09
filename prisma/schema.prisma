@@ -70,6 +70,7 @@ model Service {
   description String?
   location    String  @db.VarChar(200)
   rate        Decimal @db.Decimal(10, 2)
+  isPublished Boolean @default(true)
 
   provider          Provider          @relation(fields: [providerId], references: [userId])
   serviceCategories ServiceCategory[]
@@ -104,7 +105,7 @@ model Booking {
   customerId      String
   bookingDate     DateTime @db.Date
   appointmentDate DateTime @db.Date
-  bookingStatus   String   @db.VarChar(20)
+  bookingStatus   String   @db.VarChar(30)
   duration        Int?
 
   service  Service   @relation(fields: [serviceId], references: [id])

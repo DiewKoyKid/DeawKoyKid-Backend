@@ -4,6 +4,8 @@ const cookieParser = require("cookie-parser");
 const authRoutes = require("./routes/auth.routes");
 const userRoutes = require("./routes/user.routes");
 const providerRoutes = require('./routes/provider.routes');
+const serviceRoutes = require("./routes/service.routes");
+const bookingRoutes = require("./routes/booking.routes");
 
 const app = express();
 
@@ -23,6 +25,8 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use('/api/providers', providerRoutes);
+app.use("/api/services", serviceRoutes);
+app.use("/api/bookings", bookingRoutes);
 
 // 404 handler — must come AFTER all real routes are mounted,
 // otherwise every request matches this before reaching your routes
