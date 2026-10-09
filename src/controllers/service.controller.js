@@ -89,13 +89,35 @@ async function getServiceById(req, res) {
         description: true,
         location: true,
         rate: true,
+        rateUnit: true,
+        startTime: true,
+        endTime: true,
+        coverPhotoUrl: true,
         isPublished: true,
+        serviceCategories: {
+          select: { category: { select: { category: true } } },
+        },
         provider: {
           select: {
             avgRating: true,
             user: { select: { firstname: true, lastname: true } },
           },
         },
+        bookings: {
+          select: {
+            reviews: {
+              select: {
+                id: true,
+                rating: true,
+                comment: true,
+                timestamp: true,
+                customer: {
+                  select: { user: { select: { firstname: true } } }
+                }
+              }
+            }
+          }
+        }
       },
     });
     if (!service) {
@@ -106,11 +128,32 @@ async function getServiceById(req, res) {
       return res.status(410).json({ error: "This service is no longer available." });
     }
 
-    const { isPublished, provider, rate, ...rest } = service;
+    const { isPublished, provider, rate, serviceCategories, bookings, ...rest } = service;
+
+    // Flatten categories
+    const categories = serviceCategories.map((c) => c.category.category);
+
+    // Extract all reviews from bookings
+    const reviews = [];
+    bookings.forEach((booking) => {
+      booking.reviews.forEach((review) => {
+        reviews.push({
+          id: review.id,
+          author: review.customer.user.firstname,
+          rating: review.rating,
+          comment: review.comment,
+          date: review.timestamp,
+        });
+      });
+    });
+
     return res.status(200).json({
       service: {
         ...rest,
         rate: Number(rate), // Decimal would serialize as a string
+        categories,
+        reviewCount: reviews.length,
+        reviews, // Note: returning reviews here so the frontend can use them
         provider: {
           firstname: provider.user.firstname,
           lastname: provider.user.lastname,
