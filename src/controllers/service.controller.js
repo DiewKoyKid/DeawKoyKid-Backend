@@ -77,4 +77,51 @@ async function createService(req, res) {
   }
 }
 
-module.exports = { createService };
+// GET /api/services/:id
+async function getServiceById(req, res) {
+  try {
+    const service = await prisma.service.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        providerId: true,
+        title: true,
+        description: true,
+        location: true,
+        rate: true,
+        isPublished: true,
+        provider: {
+          select: {
+            avgRating: true,
+            user: { select: { firstname: true, lastname: true } },
+          },
+        },
+      },
+    });
+    if (!service) {
+      return res.status(404).json({ error: "Service not found." });
+    }
+    // The provider took it down; it existed, so say so rather than "not found"
+    if (!service.isPublished) {
+      return res.status(410).json({ error: "This service is no longer available." });
+    }
+
+    const { isPublished, provider, rate, ...rest } = service;
+    return res.status(200).json({
+      service: {
+        ...rest,
+        rate: Number(rate), // Decimal would serialize as a string
+        provider: {
+          firstname: provider.user.firstname,
+          lastname: provider.user.lastname,
+          avgRating: provider.avgRating === null ? null : Number(provider.avgRating),
+        },
+      },
+    });
+  } catch (err) {
+    console.error("getServiceById error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { createService, getServiceById };
