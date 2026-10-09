@@ -105,7 +105,7 @@ model Booking {
   customerId      String
   bookingDate     DateTime @db.Date
   appointmentDate DateTime @db.Date
-  bookingStatus   String   @db.VarChar(20)
+  bookingStatus   String   @db.VarChar(30)
   duration        Int?
 
   service  Service   @relation(fields: [serviceId], references: [id])
