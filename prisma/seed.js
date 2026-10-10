@@ -1,5 +1,10 @@
 require('dotenv').config();
 const prisma = require('../src/lib/prisma');
+const { hashPassword } = require("../src/utils/hash");
+
+// Every sample account signs in with this password. Stored hashed, like real
+// accounts, so login (bcrypt compare) works for them.
+const SAMPLE_PASSWORD = "password123";
 
 const CATEGORIES = [
   'Food tour',
@@ -70,7 +75,7 @@ async function main() {
       mockUser = await prisma.user.create({
         data: {
           username: "mockreviewer",
-          password: "password123",
+          password: await hashPassword(SAMPLE_PASSWORD),
           firstname: "Alice",
           lastname: "Reviewer",
         }
@@ -129,7 +134,7 @@ async function main() {
       let u = await prisma.user.findUnique({ where: { username: rev.user } });
       if (!u) {
         u = await prisma.user.create({
-          data: { username: rev.user, password: "password123", firstname: rev.first, lastname: "Reviewer" }
+          data: { username: rev.user, password: await hashPassword(SAMPLE_PASSWORD), firstname: rev.first, lastname: "Reviewer" }
         });
         await prisma.customer.create({ data: { userId: u.id } });
       }
@@ -196,7 +201,7 @@ async function main() {
     let u = await prisma.user.findUnique({ where: { username: pd.user } });
     if (!u) {
       u = await prisma.user.create({
-        data: { username: pd.user, password: "password123", firstname: pd.first, lastname: pd.last }
+        data: { username: pd.user, password: await hashPassword(SAMPLE_PASSWORD), firstname: pd.first, lastname: pd.last }
       });
       await prisma.provider.create({ data: { userId: u.id } });
     }
