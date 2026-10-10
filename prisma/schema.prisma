@@ -12,22 +12,23 @@ datasource db {
 }
 
 model User {
-  id          String    @id @default(uuid())
-  username    String    @unique @db.VarChar(50)
-  email       String?   @unique @db.VarChar(254)
-  password    String    @db.VarChar(255)
-  firstname   String    @db.VarChar(80)
-  lastname    String    @db.VarChar(80)
-  gender      String?   @db.Char(1)
-  bdate       DateTime? @db.Date
-  bankAccount String?   @db.VarChar(20)
-  phoneNumber String?   @db.VarChar(20)
-  instagram   String?   @db.VarChar(40)
-  line        String?   @db.VarChar(40)
-  facebook    String?   @db.VarChar(40)
-  consentAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  username        String    @unique @db.VarChar(50)
+  email           String?   @unique @db.VarChar(254)
+  password        String    @db.VarChar(255)
+  firstname       String    @db.VarChar(80)
+  lastname        String    @db.VarChar(80)
+  gender          String?   @db.Char(1)
+  bdate           DateTime? @db.Date
+  bankAccount     String?   @db.VarChar(20)
+  phoneNumber     String?   @db.VarChar(20)
+  instagram       String?   @db.VarChar(40)
+  line            String?   @db.VarChar(40)
+  facebook        String?   @db.VarChar(40)
+  profilePhotoUrl String?
+  consentAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   provider     Provider?
   customer     Customer?
@@ -65,13 +66,17 @@ model Customer {
 }
 
 model Service {
-  id          String  @id @default(uuid())
-  providerId  String
-  title       String  @db.VarChar(150)
-  description String?
-  location    String  @db.VarChar(200)
-  rate        Decimal @db.Decimal(10, 2)
-  isPublished Boolean @default(true)
+  id            String  @id @default(uuid())
+  providerId    String
+  title         String  @db.VarChar(150)
+  description   String?
+  location      String  @db.VarChar(200)
+  rate          Decimal @db.Decimal(10, 2)
+  rateUnit      String? @db.VarChar(50)
+  startTime     String? @db.VarChar(10)
+  endTime       String? @db.VarChar(10)
+  coverPhotoUrl String?
+  isPublished   Boolean @default(true)
 
   provider          Provider          @relation(fields: [providerId], references: [userId])
   serviceCategories ServiceCategory[]

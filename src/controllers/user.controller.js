@@ -1,5 +1,11 @@
+const fs = require("fs/promises");
+const path = require("path");
 const prisma = require("../lib/prisma");
 const { rolesFor } = require("../utils/roles");
+const {
+  PROFILE_PHOTO_DIR,
+  PROFILE_PHOTO_URL_PREFIX,
+} = require("../middlewares/profilePhotoUpload");
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^0\d{9}$/;
 
@@ -50,6 +56,7 @@ const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = 
         email: true,
         firstname: true,
         lastname: true,
+        profilePhotoUrl: true,
         customer: { select: { userId: true } },
         provider: { select: { userId: true } },
       },
@@ -62,6 +69,7 @@ const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = 
         email: user.email,
         firstname: user.firstname,
         lastname: user.lastname,
+        profilePhotoUrl: user.profilePhotoUrl,
         roles: rolesFor(user),
       },
     });
@@ -89,6 +97,7 @@ async function getMyProfile(req, res, next) {
         instagram: true,
         line: true,
         facebook: true,
+        profilePhotoUrl: true,
         provider: { select: { bio: true, languages: true, interests: true, serviceArea: true } },
       },
     });
@@ -208,6 +217,7 @@ async function updateProfile(req, res, next) {
         instagram: true,
         line: true,
         facebook: true,
+        profilePhotoUrl: true,
         provider: { select: { bio: true, languages: true, interests: true, serviceArea: true } },
       },
     });
@@ -240,6 +250,7 @@ async function getPublicProfile(req, res, next) {
         instagram: true,
         line: true,
         facebook: true,
+        profilePhotoUrl: true,
         provider: {
           select: {
             bio: true,
@@ -263,4 +274,88 @@ async function getPublicProfile(req, res, next) {
   }
 }
 
-module.exports = { getMyProfile, updateProfile, getPublicProfile, addProviderProfile };
+// Deletes a stored profile photo. URLs that aren't ours and files that are
+// already gone are ignored: the database is the source of truth.
+async function removeStoredPhoto(url) {
+  if (!url || !url.startsWith(PROFILE_PHOTO_URL_PREFIX)) return;
+  await fs.unlink(path.join(PROFILE_PHOTO_DIR, path.basename(url))).catch(() => {});
+}
+
+// The upload filter trusts the browser's content type, so also check the
+// file really starts like a JPEG (FF D8 FF) or PNG (89 50 4E 47).
+const IMAGE_SIGNATURES = [Buffer.from([0xff, 0xd8, 0xff]), Buffer.from([0x89, 0x50, 0x4e, 0x47])];
+
+async function isJpegOrPng(filePath) {
+  const handle = await fs.open(filePath, "r");
+  try {
+    const { buffer } = await handle.read(Buffer.alloc(4), 0, 4, 0);
+    return IMAGE_SIGNATURES.some((signature) => buffer.subarray(0, signature.length).equals(signature));
+  } finally {
+    await handle.close();
+  }
+}
+
+// PUT /api/users/me/photo (multipart/form-data, field "photo")
+// Replaces the signed-in user's profile photo; customers and providers alike.
+async function uploadMyPhoto(req, res, next) {
+  if (!req.file) {
+    return res.status(400).json({ error: "photo is required" });
+  }
+  const uploadedPath = req.file.path;
+
+  try {
+    if (!(await isJpegOrPng(uploadedPath))) {
+      await fs.unlink(uploadedPath).catch(() => {});
+      return res.status(400).json({ error: "photo must be a JPG or PNG image" });
+    }
+
+    const currentUserId = req.user.userId;
+    const existing = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { profilePhotoUrl: true },
+    });
+    if (!existing) {
+      await fs.unlink(uploadedPath).catch(() => {});
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    const profilePhotoUrl = `${PROFILE_PHOTO_URL_PREFIX}${req.file.filename}`;
+    await prisma.user.update({ where: { id: currentUserId }, data: { profilePhotoUrl } });
+    await removeStoredPhoto(existing.profilePhotoUrl);
+
+    return res.status(200).json({ profilePhotoUrl });
+  } catch (err) {
+    await fs.unlink(uploadedPath).catch(() => {});
+    next(err);
+  }
+}
+
+// DELETE /api/users/me/photo
+async function deleteMyPhoto(req, res, next) {
+  try {
+    const currentUserId = req.user.userId;
+    const existing = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { profilePhotoUrl: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    await prisma.user.update({ where: { id: currentUserId }, data: { profilePhotoUrl: null } });
+    await removeStoredPhoto(existing.profilePhotoUrl);
+
+    return res.status(200).json({ profilePhotoUrl: null });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  getMyProfile,
+  updateProfile,
+  getPublicProfile,
+  addProviderProfile,
+  uploadMyPhoto,
+  deleteMyPhoto,
+};
