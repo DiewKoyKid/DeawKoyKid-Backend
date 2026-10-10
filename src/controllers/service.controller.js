@@ -169,5 +169,198 @@ async function getServiceById(req, res) {
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+// GET /api/services/search
+async function searchServices(req, res) {
+  try {
+    const {
+      q,
+      gender,
+      minAge,
+      maxAge,
+      categories,
+      minPrice,
+      maxPrice,
+      minRating,
+      page = "1",
+      limit = "10",
+      sortBy = "rating_desc"
+    } = req.query;
 
-module.exports = { createService, getServiceById };
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build the "where" clause
+    const where = {
+      isPublished: true
+    };
+
+    // Text search
+    if (q) {
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { description: { contains: q, mode: 'insensitive' } },
+        { location: { contains: q, mode: 'insensitive' } },
+        { provider: { user: { firstname: { contains: q, mode: 'insensitive' } } } },
+        { provider: { user: { lastname: { contains: q, mode: 'insensitive' } } } }
+      ];
+    }
+
+    // Price filter
+    if (minPrice || maxPrice) {
+      where.rate = {};
+      if (minPrice) where.rate.gte = parseFloat(minPrice);
+      if (maxPrice) where.rate.lte = parseFloat(maxPrice);
+    }
+
+    // Provider filters (gender, age, rating)
+    const providerWhere = {};
+    const userWhere = {};
+    let hasProviderFilter = false;
+    let hasUserFilter = false;
+
+    if (minRating) {
+      providerWhere.avgRating = { gte: parseFloat(minRating) };
+      hasProviderFilter = true;
+    }
+
+    if (gender && gender !== 'Any') {
+      let g = 'O';
+      if (gender === 'Male') g = 'M';
+      if (gender === 'Female') g = 'F';
+      userWhere.gender = g;
+      hasUserFilter = true;
+    }
+
+    if (minAge || maxAge) {
+      const today = new Date();
+      if (minAge) {
+        // e.g. minAge = 20 means born at least 20 years ago (so bdate <= 2006)
+        const maxDate = new Date(today.getFullYear() - parseInt(minAge, 10), today.getMonth(), today.getDate());
+        userWhere.bdate = { ...userWhere.bdate, lte: maxDate };
+        hasUserFilter = true;
+      }
+      if (maxAge) {
+        // e.g. maxAge = 35 means born at most 35 years ago (so bdate >= 1991)
+        const minDate = new Date(today.getFullYear() - parseInt(maxAge, 10) - 1, today.getMonth(), today.getDate() + 1);
+        userWhere.bdate = { ...userWhere.bdate, gte: minDate };
+        hasUserFilter = true;
+      }
+    }
+
+    if (hasUserFilter) {
+      providerWhere.user = userWhere;
+      hasProviderFilter = true;
+    }
+    
+    if (hasProviderFilter) {
+      where.provider = providerWhere;
+    }
+
+    // Category filter
+    if (categories) {
+      let catArray = [];
+      if (Array.isArray(categories)) catArray = categories;
+      else if (typeof categories === 'string') catArray = categories.split(',').map(c => c.trim());
+      
+      if (catArray.length > 0) {
+        where.serviceCategories = {
+          some: {
+            category: {
+              category: { in: catArray }
+            }
+          }
+        };
+      }
+    }
+
+    // Sorting
+    let orderBy = {};
+    if (sortBy === 'rating_desc') {
+      orderBy = { provider: { avgRating: 'desc' } };
+    } else if (sortBy === 'price_asc') {
+      orderBy = { rate: 'asc' };
+    } else if (sortBy === 'price_desc') {
+      orderBy = { rate: 'desc' };
+    } else {
+      orderBy = { id: 'desc' };
+    }
+
+    const [services, totalCount] = await Promise.all([
+      prisma.service.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limitNum,
+        select: {
+          id: true,
+          title: true,
+          location: true,
+          rate: true,
+          rateUnit: true,
+          coverPhotoUrl: true,
+          provider: {
+            select: {
+              avgRating: true,
+              user: {
+                select: {
+                  firstname: true,
+                  lastname: true
+                }
+              }
+            }
+          },
+          bookings: {
+            select: {
+              reviews: { select: { id: true, rating: true } }
+            }
+          }
+        }
+      }),
+      prisma.service.count({ where })
+    ]);
+
+    // Format the result
+    const formattedServices = services.map(s => {
+      let reviewCount = 0;
+      let sumRating = 0;
+      s.bookings.forEach(b => {
+        reviewCount += b.reviews.length;
+        b.reviews.forEach(r => sumRating += r.rating);
+      });
+
+      const calculatedAvg = reviewCount > 0 ? sumRating / reviewCount : null;
+
+      return {
+        id: s.id,
+        title: s.title,
+        location: s.location,
+        rate: Number(s.rate),
+        rateUnit: s.rateUnit,
+        coverPhotoUrl: s.coverPhotoUrl,
+        provider: {
+          firstname: s.provider.user.firstname,
+          lastname: s.provider.user.lastname,
+          avgRating: s.provider.avgRating ? Number(s.provider.avgRating) : calculatedAvg
+        },
+        reviewCount
+      };
+    });
+
+    return res.status(200).json({
+      data: formattedServices,
+      meta: {
+        totalCount,
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalCount / limitNum),
+        limit: limitNum
+      }
+    });
+
+  } catch (err) {
+    console.error("searchServices error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { createService, getServiceById, searchServices };

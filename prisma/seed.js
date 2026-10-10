@@ -183,6 +183,141 @@ async function main() {
   }
   // --------------------------------------
 
+  // --- ADD NEW PROVIDERS AND 8 MORE SERVICES ---
+  
+  const providersData = [
+    { user: "somchai_guide", first: "Somchai", last: "Guide" },
+    { user: "kanya_explore", first: "Kanya", last: "Explore" },
+    { user: "nat_tours", first: "Nat", last: "Tours" }
+  ];
+
+  const providerMap = {};
+  for (const pd of providersData) {
+    let u = await prisma.user.findUnique({ where: { username: pd.user } });
+    if (!u) {
+      u = await prisma.user.create({
+        data: { username: pd.user, password: "password123", firstname: pd.first, lastname: pd.last }
+      });
+      await prisma.provider.create({ data: { userId: u.id } });
+    }
+    providerMap[pd.user] = u.id;
+  }
+  
+  if (host) {
+    providerMap["host"] = host.userId;
+  }
+
+  const servicesData = [
+    {
+      id: "03", providerId: providerMap["somchai_guide"], title: "Bang Rak Night Food Crawl",
+      desc: "Taste the best local street food in Bang Rak area.", loc: "Bang Rak, Bangkok",
+      rate: 500, rateUnit: "hour", start: "18:00:00", end: "22:00:00",
+      cats: ["Food tour", "Nightlife"], cover: "service003.jpg"
+    },
+    {
+      id: "04", providerId: providerMap["kanya_explore"], title: "Chinatown Street Photography",
+      desc: "Explore Yaowarat with a local photographer and capture the vibrant street life.", loc: "Yaowarat, Bangkok",
+      rate: 600, rateUnit: "hour", start: "17:00:00", end: "20:00:00",
+      cats: ["Photography", "Culture"], cover: "service004.jpg"
+    },
+    {
+      id: "05", providerId: providerMap["nat_tours"], title: "Grand Palace & Temple Tour",
+      desc: "Discover the rich history of Bangkok by visiting the Grand Palace and nearby temples.", loc: "Phra Nakhon, Bangkok",
+      rate: 800, rateUnit: "hour", start: "09:00:00", end: "14:00:00",
+      cats: ["Sightseeing", "Culture"], cover: "service005.jpg"
+    },
+    {
+      id: "06", providerId: providerMap["somchai_guide"], title: "Chatuchak Weekend Shopping Spree",
+      desc: "Get the best deals and navigate the massive Chatuchak market with a local.", loc: "Chatuchak, Bangkok",
+      rate: 400, rateUnit: "hour", start: "10:00:00", end: "16:00:00",
+      cats: ["Shopping"], cover: "service006.jpg"
+    },
+    {
+      id: "07", providerId: providerMap["kanya_explore"], title: "Khao Yai Nature Hiking",
+      desc: "A full day hiking trip in Khao Yai National Park.", loc: "Khao Yai National Park",
+      rate: 1200, rateUnit: "day", start: "07:00:00", end: "19:00:00",
+      cats: ["Nature & Hiking"], cover: "service007.jpg"
+    },
+    {
+      id: "08", providerId: providerMap["nat_tours"], title: "Sukhumvit Nightlife Guide",
+      desc: "Experience the best bars and clubs in Sukhumvit.", loc: "Sukhumvit, Bangkok",
+      rate: 900, rateUnit: "hour", start: "21:00:00", end: "02:00:00",
+      cats: ["Nightlife"], cover: "service008.jpg"
+    },
+    {
+      id: "09", providerId: providerMap["host"], title: "Local Indie Concert Buddy",
+      desc: "Looking for someone to go to an indie concert with? I'm your buddy!", loc: "RCA, Bangkok",
+      rate: 350, rateUnit: "event", start: "19:00:00", end: "23:00:00",
+      cats: ["Concerts & Events"], cover: "service009.jpg"
+    },
+    {
+      id: "10", providerId: providerMap["somchai_guide"], title: "Ayutthaya Historical Sightseeing",
+      desc: "A day trip to the ancient city of Ayutthaya.", loc: "Ayutthaya",
+      rate: 1500, rateUnit: "day", start: "08:00:00", end: "18:00:00",
+      cats: ["Sightseeing", "Culture"], cover: "service010.jpg"
+    }
+  ];
+
+  for (const s of servicesData) {
+    if (!s.providerId) continue; // safety check
+    const existing = await prisma.service.findFirst({ where: { id: s.id } });
+    if (!existing) {
+      await prisma.service.create({
+        data: {
+          id: s.id,
+          providerId: s.providerId,
+          title: s.title,
+          description: s.desc,
+          location: s.loc,
+          rate: s.rate,
+          rateUnit: s.rateUnit,
+          startTime: s.start,
+          endTime: s.end,
+          coverPhotoUrl: `http://localhost:8081/uploads/services-cover-photo/${s.cover}`,
+          isPublished: true,
+        }
+      });
+      console.log(`Created service: ${s.title}`);
+
+      for (const catName of s.cats) {
+        const cat = await prisma.category.findFirst({ where: { category: catName } });
+        if (cat) {
+          await prisma.serviceCategory.create({
+            data: { serviceId: s.id, categoryId: cat.id }
+          });
+        }
+      }
+    } else {
+      console.log(`Service already exists: ${s.title}`);
+    }
+  }
+
+  const topPickServices = ["04", "05", "08", "10"];
+  let mockUser2 = await prisma.user.findUnique({ where: { username: "mockreviewer" } });
+  
+  if (mockUser2) {
+    for (const sid of topPickServices) {
+      const b = await prisma.booking.findFirst({ where: { serviceId: sid, customerId: mockUser2.id } });
+      let bId;
+      if (!b) {
+        const newB = await prisma.booking.create({
+          data: { serviceId: sid, customerId: mockUser2.id, bookingDate: new Date(), appointmentDate: new Date(), bookingStatus: "COMPLETED" }
+        });
+        bId = newB.id;
+      } else {
+        bId = b.id;
+      }
+
+      const r = await prisma.review.findFirst({ where: { bookingId: bId } });
+      if (!r) {
+        await prisma.review.create({
+          data: { bookingId: bId, customerId: mockUser2.id, rating: 5, comment: "Amazing experience! Highly recommended.", timestamp: new Date() }
+        });
+        console.log(`Added 5-star review for service ${sid}`);
+      }
+    }
+  }
+
   console.log('Seeding finished.');
 }
 
