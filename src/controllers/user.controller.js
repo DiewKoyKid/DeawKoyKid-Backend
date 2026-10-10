@@ -37,7 +37,6 @@ async function addProviderProfile(req, res, next) {
       return res.status(409).json({ error: "this account already has a provider profile" });
     }
 
-    // status defaults to PENDING via the schema, same as provider registration
     const user = await prisma.user.update({
       where: { id: currentUserId },
       data: {
@@ -52,7 +51,7 @@ async function addProviderProfile(req, res, next) {
         firstname: true,
         lastname: true,
         customer: { select: { userId: true } },
-        provider: { select: { userId: true, status: true } },
+        provider: { select: { userId: true } },
       },
     });
 
