@@ -8,7 +8,7 @@ const PHONE_PATTERN = /^0\d{9}$/;
 async function addProviderProfile(req, res, next) {
   try {
     const currentUserId = req.user.userId;
-    const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = req.body;
+const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = req.body;
 
     if (!idCard) {
       return res.status(400).json({ error: "idCard is required for provider registration" });
@@ -90,7 +90,7 @@ async function getMyProfile(req, res, next) {
         instagram: true,
         line: true,
         facebook: true,
-        provider: { select: { bio: true, languages: true } },
+        provider: { select: { bio: true, languages: true, interests: true, serviceArea: true } },
       },
     });
 
@@ -120,6 +120,8 @@ async function updateProfile(req, res, next) {
       facebook,
       bio,
       languages,
+      interests,
+      serviceArea
     } = req.body;
 
     if (gender && !["M", "F", "O"].includes(gender)) {
@@ -128,6 +130,14 @@ async function updateProfile(req, res, next) {
 
     if (phoneNumber && !PHONE_PATTERN.test(phoneNumber)) {
       return res.status(400).json({ error: "phoneNumber must be 10 digits starting with 0" });
+    }
+    if (languages !== undefined && !String(languages).trim()) {
+      return res.status(400).json({ error: "Please select at least one language" });
+    }
+    for (const [name, value] of [["interests", interests], ["serviceArea", serviceArea]]) {
+      if (value !== undefined && (!Array.isArray(value) || value.some((v) => typeof v !== "string"))) {
+        return res.status(400).json({ error: `${name} must be an array of strings` });
+      }
     }
 
     const normalizedEmail = email !== undefined ? email.trim().toLowerCase() : undefined;
@@ -161,11 +171,11 @@ async function updateProfile(req, res, next) {
     }
 
     const isProvider = !!existingUser.provider;
-    const wantsProviderFieldsUpdated = bio !== undefined || languages !== undefined;
-
+    const wantsProviderFieldsUpdated = [bio, languages, interests, serviceArea].some((v) => v !== undefined);
+    
     if (wantsProviderFieldsUpdated && !isProvider) {
       return res.status(400).json({
-        error: "bio and languages can only be updated on provider accounts",
+           error: "provider details can only be updated on provider accounts",
       });
     }
 
@@ -183,7 +193,7 @@ async function updateProfile(req, res, next) {
         line,
         facebook,
         provider: wantsProviderFieldsUpdated
-          ? { update: { bio, languages } }
+          ? { update: { bio, languages, interests, serviceArea } }
           : undefined,
       },
       select: {
@@ -199,7 +209,7 @@ async function updateProfile(req, res, next) {
         instagram: true,
         line: true,
         facebook: true,
-        provider: { select: { bio: true, languages: true } },
+        provider: { select: { bio: true, languages: true, interests: true, serviceArea: true } },
       },
     });
 
@@ -235,7 +245,10 @@ async function getPublicProfile(req, res, next) {
           select: {
             bio: true,
             languages: true,
+            interests: true,
+            serviceArea: true,
             avgRating: true,
+            
           },
         },
       },
