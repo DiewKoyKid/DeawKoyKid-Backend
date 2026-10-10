@@ -104,7 +104,7 @@ async function getServiceById(req, res) {
         provider: {
           select: {
             avgRating: true,
-            user: { select: { firstname: true, lastname: true } },
+            user: { select: { firstname: true, lastname: true, profilePhotoUrl: true } },
           },
         },
         bookings: {
@@ -161,6 +161,7 @@ async function getServiceById(req, res) {
         provider: {
           firstname: provider.user.firstname,
           lastname: provider.user.lastname,
+          profilePhotoUrl: provider.user.profilePhotoUrl,
           avgRating: provider.avgRating === null ? null : Number(provider.avgRating),
         },
       },
