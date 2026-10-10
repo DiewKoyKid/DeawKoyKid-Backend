@@ -10,8 +10,12 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim() !== "";
 }
 
+function isValidTime(value) {
+  return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
+
 // Returns an error message for the first invalid field, or null when the body is valid
-function validateServiceBody({ title, description, location, rate }) {
+function validateServiceBody({ title, description, location, rate, startTime, endTime }) {
   if (!isNonEmptyString(title)) return "title is required";
   if (title.trim().length > TITLE_MAX) return `title must be at most ${TITLE_MAX} characters`;
   if (!isNonEmptyString(location)) return "location is required";
@@ -28,6 +32,15 @@ function validateServiceBody({ title, description, location, rate }) {
   // so an exact check would reject valid two-decimal rates.
   if (Math.abs(Math.round(rate * 100) - rate * 100) > 1e-6) {
     return "rate must have at most 2 decimal places";
+  }
+  if (!isValidTime(startTime)) {
+    return "startTime must be a valid time in HH:MM format";
+  }
+  if (!isValidTime(endTime)) {
+    return "endTime must be a valid time in HH:MM format";
+  }
+  if (endTime <= startTime) {
+    return "End time must be after the start time";
   }
   return null;
 }
@@ -53,7 +66,7 @@ async function createService(req, res) {
       return res.status(400).json({ error });
     }
 
-    const { title, description, location, rate } = req.body;
+    const { title, description, location, rate, startTime, endTime } = req.body;
     const service = await prisma.service.create({
       data: {
         providerId: userId,
@@ -61,6 +74,8 @@ async function createService(req, res) {
         description: description?.trim() || null,
         location: location.trim(),
         rate,
+        startTime,
+        endTime,
       },
       select: {
         id: true,
@@ -69,6 +84,8 @@ async function createService(req, res) {
         description: true,
         location: true,
         rate: true,
+        startTime: true,
+        endTime: true,
       },
     });
 
