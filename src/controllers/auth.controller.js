@@ -293,6 +293,7 @@ async function login(req, res, next) {
         email: user.email,
         firstname: user.firstname,
         lastname: user.lastname,
+        profilePhotoUrl: user.profilePhotoUrl,
         roles: rolesFor(user),
       },
     });
