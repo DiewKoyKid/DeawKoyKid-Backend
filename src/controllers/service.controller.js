@@ -177,7 +177,10 @@ async function searchServices(req, res) {
       gender,
       minAge,
       maxAge,
-      categories,
+      // The search page sends the category chips as `interests` (the URL
+      // parameter in the filter design); `categories` works as well.
+      interests,
+      categories = interests,
       minPrice,
       maxPrice,
       minRating,
@@ -224,11 +227,12 @@ async function searchServices(req, res) {
       hasProviderFilter = true;
     }
 
-    if (gender && gender !== 'Any') {
-      let g = 'O';
-      if (gender === 'Male') g = 'M';
-      if (gender === 'Female') g = 'F';
-      userWhere.gender = g;
+    // The URL uses the stored codes (gender=M|F|O, as in the filter design);
+    // the long names are accepted too. Anything else means "any gender".
+    const GENDER_CODES = { M: "M", F: "F", O: "O", Male: "M", Female: "F", Other: "O" };
+    const genderCode = GENDER_CODES[gender];
+    if (genderCode) {
+      userWhere.gender = genderCode;
       hasUserFilter = true;
     }
 
@@ -305,7 +309,8 @@ async function searchServices(req, res) {
               user: {
                 select: {
                   firstname: true,
-                  lastname: true
+                  lastname: true,
+                  profilePhotoUrl: true
                 }
               }
             }
@@ -341,6 +346,7 @@ async function searchServices(req, res) {
         provider: {
           firstname: s.provider.user.firstname,
           lastname: s.provider.user.lastname,
+          profilePhotoUrl: s.provider.user.profilePhotoUrl,
           avgRating: s.provider.avgRating ? Number(s.provider.avgRating) : calculatedAvg
         },
         reviewCount
