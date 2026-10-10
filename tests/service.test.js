@@ -96,6 +96,11 @@ describe("POST /api/services", () => {
         description: "We'll eat our way down Yaowarat Road.",
         location: "Bangkok – Yaowarat & Old Town",
         rate: 450,
+        rateUnit: "hour",
+        startTime: null,
+        endTime: null,
+        coverPhotoUrl: null,
+        categoryIds: [],
       });
 
       const saved = await prisma.service.findUnique({ where: { id: res.body.service.id } });
@@ -157,6 +162,78 @@ describe("POST /api/services", () => {
     });
   });
 
+  describe("service details (rate unit, hours, cover photo, categories)", () => {
+    let agent;
+    const categoryIds = [];
+
+    beforeAll(async () => {
+      agent = request.agent(app);
+      await loginAsProvider(agent, "svc_details");
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      for (const name of ["Food", "Photo"]) {
+        const category = await prisma.category.create({ data: { category: `${name} ${suffix}` } });
+        categoryIds.push(category.id);
+      }
+    });
+
+    afterAll(async () => {
+      await prisma.serviceCategory.deleteMany({ where: { categoryId: { in: categoryIds } } });
+      await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
+    });
+
+    it("saves and returns all of them", async () => {
+      const res = await agent.post("/api/services").send({
+        ...validService(),
+        rate: 2200,
+        rateUnit: "day",
+        startTime: "08:30",
+        endTime: "17:00",
+        coverPhotoUrl: "/uploads/image-123.jpg",
+        categoryIds,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.service).toMatchObject({
+        rate: 2200,
+        rateUnit: "day",
+        startTime: "08:30",
+        endTime: "17:00",
+        coverPhotoUrl: "/uploads/image-123.jpg",
+      });
+      expect([...res.body.service.categoryIds].sort()).toEqual([...categoryIds].sort());
+
+      const saved = await prisma.service.findUnique({
+        where: { id: res.body.service.id },
+        include: { serviceCategories: true },
+      });
+      expect(saved).toMatchObject({ rateUnit: "day", startTime: "08:30", endTime: "17:00" });
+      expect(saved.serviceCategories).toHaveLength(2);
+    });
+
+    it("ignores a repeated category", async () => {
+      const res = await agent
+        .post("/api/services")
+        .send({ ...validService(), categoryIds: [categoryIds[0], categoryIds[0]] });
+
+      expect(res.status).toBe(201);
+      expect(res.body.service.categoryIds).toEqual([categoryIds[0]]);
+    });
+
+    it("defaults to per hour and treats empty hours and photo as none", async () => {
+      const res = await agent
+        .post("/api/services")
+        .send({ ...validService(), rateUnit: "", startTime: "", endTime: "", coverPhotoUrl: "" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.service).toMatchObject({
+        rateUnit: "hour",
+        startTime: null,
+        endTime: null,
+        coverPhotoUrl: null,
+      });
+    });
+  });
+
   describe("validation", () => {
     let agent;
     let provider;
@@ -186,11 +263,27 @@ describe("POST /api/services", () => {
       ["rate is a string", { rate: "450" }, /rate must be a positive number/],
       ["rate is over the column limit", { rate: 100000000 }, /rate must be a positive number/],
       ["rate has 3 decimal places", { rate: 450.123 }, /at most 2 decimal places/],
+      ["rateUnit is not hour or day", { rateUnit: "week" }, /rateUnit must be "hour" or "day"/],
+      ["startTime isn't HH:MM", { startTime: "9am", endTime: "17:00" }, /startTime must be a time/],
+      ["endTime isn't a real time", { startTime: "09:00", endTime: "25:00" }, /endTime must be a time/],
+      ["only startTime is given", { startTime: "09:00" }, /startTime and endTime go together/],
+      ["only endTime is given", { endTime: "17:00" }, /startTime and endTime go together/],
+      ["endTime is before startTime", { startTime: "17:00", endTime: "16:00" }, /endTime must be after startTime/],
+      ["endTime equals startTime", { startTime: "09:00", endTime: "09:00" }, /endTime must be after startTime/],
+      ["coverPhotoUrl is not a string", { coverPhotoUrl: 42 }, /coverPhotoUrl must be a string/],
+      ["categoryIds is not an array", { categoryIds: "food" }, /categoryIds must be an array/],
+      [
+        "categoryIds has an unknown category",
+        { categoryIds: ["00000000-0000-0000-0000-000000000000"] },
+        /unknown category/,
+      ],
     ])("returns 400 when the %s", async (_label, override, message) => {
       const res = await agent.post("/api/services").send({ ...validService(), ...override });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(message);
+      // The same message, keyed by the field, for forms.
+      expect(Object.values(res.body.errors)).toEqual([res.body.error]);
     });
 
     it("returns 400 for an empty body", async () => {

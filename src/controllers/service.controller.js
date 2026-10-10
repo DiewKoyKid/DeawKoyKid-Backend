@@ -10,26 +10,78 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim() !== "";
 }
 
-// Returns an error message for the first invalid field, or null when the body is valid
-function validateServiceBody({ title, description, location, rate }) {
-  if (!isNonEmptyString(title)) return "title is required";
-  if (title.trim().length > TITLE_MAX) return `title must be at most ${TITLE_MAX} characters`;
-  if (!isNonEmptyString(location)) return "location is required";
+const RATE_UNITS = ["hour", "day"];
+// "HH:MM", 00:00-23:59. Zero-padded, so times compare correctly as strings.
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const isGiven = (value) => value !== undefined && value !== null && value !== "";
+
+// Returns { field, message } for the first invalid field, or null when the body is valid
+function validateServiceBody({
+  title,
+  description,
+  location,
+  rate,
+  rateUnit,
+  startTime,
+  endTime,
+  coverPhotoUrl,
+  categoryIds,
+}) {
+  const invalid = (field, message) => ({ field, message });
+
+  if (!isNonEmptyString(title)) return invalid("title", "title is required");
+  if (title.trim().length > TITLE_MAX) {
+    return invalid("title", `title must be at most ${TITLE_MAX} characters`);
+  }
+  if (!isNonEmptyString(location)) return invalid("location", "location is required");
   if (location.trim().length > LOCATION_MAX) {
-    return `location must be at most ${LOCATION_MAX} characters`;
+    return invalid("location", `location must be at most ${LOCATION_MAX} characters`);
   }
   if (description !== undefined && description !== null && typeof description !== "string") {
-    return "description must be a string";
+    return invalid("description", "description must be a string");
   }
   if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate > RATE_MAX) {
-    return "rate must be a positive number";
+    return invalid("rate", "rate must be a positive number");
   }
   // Compare with a tolerance: in floating point 19.99 * 100 is 1998.9999999999998,
   // so an exact check would reject valid two-decimal rates.
   if (Math.abs(Math.round(rate * 100) - rate * 100) > 1e-6) {
-    return "rate must have at most 2 decimal places";
+    return invalid("rate", "rate must have at most 2 decimal places");
+  }
+  if (isGiven(rateUnit) && !RATE_UNITS.includes(rateUnit)) {
+    return invalid("rateUnit", 'rateUnit must be "hour" or "day"');
+  }
+
+  // Service hours are optional, but come as a pair and end after they start.
+  if (isGiven(startTime) && !TIME_PATTERN.test(startTime)) {
+    return invalid("startTime", "startTime must be a time like 09:00");
+  }
+  if (isGiven(endTime) && !TIME_PATTERN.test(endTime)) {
+    return invalid("endTime", "endTime must be a time like 17:00");
+  }
+  if (isGiven(startTime) !== isGiven(endTime)) {
+    return invalid(isGiven(startTime) ? "endTime" : "startTime", "startTime and endTime go together");
+  }
+  if (isGiven(startTime) && endTime <= startTime) {
+    return invalid("endTime", "endTime must be after startTime");
+  }
+
+  if (isGiven(coverPhotoUrl) && typeof coverPhotoUrl !== "string") {
+    return invalid("coverPhotoUrl", "coverPhotoUrl must be a string");
+  }
+  if (
+    categoryIds !== undefined &&
+    (!Array.isArray(categoryIds) || categoryIds.some((id) => typeof id !== "string"))
+  ) {
+    return invalid("categoryIds", "categoryIds must be an array of category ids");
   }
   return null;
+}
+
+// 400 body: `error` for a single message, `errors` per field for forms.
+function badRequest(res, { field, message }) {
+  return res.status(400).json({ error: message, errors: { [field]: message } });
 }
 
 // POST /api/services
@@ -46,12 +98,22 @@ async function createService(req, res) {
       return res.status(403).json({ error: "Provider access only." });
     }
 
-    const error = validateServiceBody(req.body || {});
-    if (error) {
-      return res.status(400).json({ error });
+    const problem = validateServiceBody(req.body || {});
+    if (problem) {
+      return badRequest(res, problem);
     }
 
-    const { title, description, location, rate } = req.body;
+    const { title, description, location, rate, rateUnit, startTime, endTime, coverPhotoUrl } =
+      req.body;
+    const categoryIds = [...new Set(req.body.categoryIds ?? [])];
+
+    if (categoryIds.length > 0) {
+      const known = await prisma.category.count({ where: { id: { in: categoryIds } } });
+      if (known !== categoryIds.length) {
+        return badRequest(res, { field: "categoryIds", message: "categoryIds contains an unknown category" });
+      }
+    }
+
     const service = await prisma.service.create({
       data: {
         providerId: userId,
@@ -59,6 +121,11 @@ async function createService(req, res) {
         description: description?.trim() || null,
         location: location.trim(),
         rate,
+        rateUnit: rateUnit || "hour",
+        startTime: isGiven(startTime) ? startTime : null,
+        endTime: isGiven(endTime) ? endTime : null,
+        coverPhotoUrl: isGiven(coverPhotoUrl) ? coverPhotoUrl : null,
+        serviceCategories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
       },
       select: {
         id: true,
@@ -67,11 +134,21 @@ async function createService(req, res) {
         description: true,
         location: true,
         rate: true,
+        rateUnit: true,
+        startTime: true,
+        endTime: true,
+        coverPhotoUrl: true,
+        serviceCategories: { select: { categoryId: true } },
       },
     });
 
+    const { serviceCategories, ...created } = service;
     return res.status(201).json({
-      service: { ...service, rate: Number(service.rate) }, // Decimal would serialize as a string
+      service: {
+        ...created,
+        rate: Number(created.rate), // Decimal would serialize as a string
+        categoryIds: serviceCategories.map((link) => link.categoryId),
+      },
     });
   } catch (err) {
     console.error("createService error:", err);

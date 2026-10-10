@@ -124,4 +124,35 @@ describe("GET /api/providers/me/services", () => {
       },
     ]);
   });
+
+  it("reports each service's own rate unit, cover photo and published state", async () => {
+    const agent = request.agent(app);
+    const provider = await loginAsNewProvider(agent, "my_services_columns");
+
+    const service = await prisma.service.create({
+      data: {
+        providerId: provider.id,
+        title: "Ayutthaya temples day trip",
+        location: "Ayutthaya",
+        rate: 2800,
+        rateUnit: "day",
+        coverPhotoUrl: "/uploads/ayutthaya.jpg",
+        isPublished: false,
+      },
+    });
+    createdServiceIds.push(service.id);
+
+    const res = await agent.get("/api/providers/me/services");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      expect.objectContaining({
+        id: service.id,
+        rate: 2800,
+        rateUnit: "day",
+        coverPhotoUrl: "/uploads/ayutthaya.jpg",
+        status: "UNPUBLISHED",
+      }),
+    ]);
+  });
 });
