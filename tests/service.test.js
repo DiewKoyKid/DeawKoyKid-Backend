@@ -51,6 +51,8 @@ const validService = () => ({
   description: "We'll eat our way down Yaowarat Road.",
   location: "Bangkok – Yaowarat & Old Town",
   rate: 450,
+  startTime: "09:00",
+  endTime: "17:00",
 });
 
 describe("POST /api/services", () => {
@@ -102,10 +104,17 @@ describe("POST /api/services", () => {
         description: "We'll eat our way down Yaowarat Road.",
         location: "Bangkok – Yaowarat & Old Town",
         rate: 450,
+        startTime: "09:00",
+        endTime: "17:00",
       });
 
       const saved = await prisma.service.findUnique({ where: { id: res.body.service.id } });
-      expect(saved).toMatchObject({ providerId: provider.id, title: "Old Town street food walk" });
+      expect(saved).toMatchObject({
+        providerId: provider.id,
+        title: "Old Town street food walk",
+        startTime: "09:00",
+        endTime: "17:00",
+      });
       expect(Number(saved.rate)).toBe(450);
     });
 
@@ -192,6 +201,13 @@ describe("POST /api/services", () => {
       ["rate is a string", { rate: "450" }, /rate must be a positive number/],
       ["rate is over the column limit", { rate: 100000000 }, /rate must be a positive number/],
       ["rate has 3 decimal places", { rate: 450.123 }, /at most 2 decimal places/],
+      ["start time is missing", { startTime: undefined }, /startTime must be a valid time/],
+      ["start time is malformed", { startTime: "9:00" }, /startTime must be a valid time/],
+      ["start time is out of range", { startTime: "24:00" }, /startTime must be a valid time/],
+      ["end time is missing", { endTime: undefined }, /endTime must be a valid time/],
+      ["end time is malformed", { endTime: "17:60" }, /endTime must be a valid time/],
+      ["end time is the same as start time", { endTime: "09:00" }, /after the start time/],
+      ["end time is before start time", { endTime: "08:59" }, /after the start time/],
     ])("returns 400 when the %s", async (_label, override, message) => {
       const res = await agent.post("/api/services").send({ ...validService(), ...override });
 
