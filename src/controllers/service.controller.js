@@ -24,7 +24,11 @@ function validateServiceBody({ title, description, location, rate }) {
   if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0 || rate > RATE_MAX) {
     return "rate must be a positive number";
   }
-  if (Math.round(rate * 100) !== rate * 100) return "rate must have at most 2 decimal places";
+  // Compare with a tolerance: in floating point 19.99 * 100 is 1998.9999999999998,
+  // so an exact check would reject valid two-decimal rates.
+  if (Math.abs(Math.round(rate * 100) - rate * 100) > 1e-6) {
+    return "rate must have at most 2 decimal places";
+  }
   return null;
 }
 
@@ -33,15 +37,13 @@ async function createService(req, res) {
   try {
     const { userId } = req.user; // attached by authenticateToken
 
+    // Any provider can publish; there is no approval step.
     const provider = await prisma.provider.findUnique({
       where: { userId },
-      select: { status: true },
+      select: { userId: true },
     });
     if (!provider) {
       return res.status(403).json({ error: "Provider access only." });
-    }
-    if (provider.status !== "APPROVED") {
-      return res.status(403).json({ error: "Only approved providers can create services." });
     }
 
     const error = validateServiceBody(req.body || {});
