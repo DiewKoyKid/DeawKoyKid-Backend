@@ -112,8 +112,15 @@ describe("GET /api/services/search", () => {
     expect(titles).toEqual(["night market"]);
   });
 
-  it("filters by price range", async () => {
+    it("filters by price range", async () => {
     const { titles } = await search({ minPrice: 500, maxPrice: 800 });
     expect(titles).toEqual(["photo walk"]);
+  });
+
+  it("responds within 3 seconds (US5-1)", async () => {
+    const start = Date.now();
+    const res = await request(app).get("/api/services/search").query({ q: "Somsri" });
+    expect(res.status).toBe(200);
+    expect(Date.now() - start).toBeLessThan(3000);
   });
 });

@@ -34,7 +34,8 @@ model User {
   customer     Customer?
   reports      Report[]
   sentChatLogs ChatLog[] @relation("ChatLogSender")
-
+  @@index([firstname(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([lastname(ops: raw("gin_trgm_ops"))], type: Gin)
   @@map("users")
 }
 
@@ -51,6 +52,7 @@ model Provider {
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   services Service[]
+  @@index([avgRating])
 
   @@map("providers")
 }
@@ -81,6 +83,11 @@ model Service {
   provider          Provider          @relation(fields: [providerId], references: [userId])
   serviceCategories ServiceCategory[]
   bookings          Booking[]
+  @@index([providerId])
+  @@index([isPublished])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([location(ops: raw("gin_trgm_ops"))], type: Gin)
 
   @@map("services")
 }
@@ -90,6 +97,7 @@ model Category {
   category String @db.VarChar(100)
 
   serviceCategories ServiceCategory[]
+  
 
   @@map("categories")
 }
@@ -102,6 +110,7 @@ model ServiceCategory {
   category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@id([serviceId, categoryId])
+  @@index([categoryId])
   @@map("service_categories")
 }
 
@@ -118,6 +127,7 @@ model Booking {
   customer Customer  @relation(fields: [customerId], references: [userId])
   reviews  Review[]
   chatLogs ChatLog[]
+   @@index([serviceId])
 
   @@map("bookings")
 }
@@ -132,6 +142,7 @@ model Review {
 
   booking  Booking  @relation(fields: [bookingId], references: [id])
   customer Customer @relation(fields: [customerId], references: [userId])
+  @@index([bookingId])
 
   @@map("reviews")
 }
