@@ -48,7 +48,6 @@ model Provider {
   avgRating             Decimal? @db.Decimal(3, 2)
   emergencyContactName  String?  @db.VarChar(80)
   emergencyContactPhone String?  @db.VarChar(20)
-  status                String   @default("PENDING") @db.VarChar(20)
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   services Service[]

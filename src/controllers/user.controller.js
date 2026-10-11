@@ -43,7 +43,6 @@ const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = 
       return res.status(409).json({ error: "this account already has a provider profile" });
     }
 
-    // status defaults to PENDING via the schema, same as provider registration
     const user = await prisma.user.update({
       where: { id: currentUserId },
       data: {
@@ -59,7 +58,7 @@ const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = 
         lastname: true,
         profilePhotoUrl: true,
         customer: { select: { userId: true } },
-        provider: { select: { userId: true, status: true } },
+        provider: { select: { userId: true } },
       },
     });
 

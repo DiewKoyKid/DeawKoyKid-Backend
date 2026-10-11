@@ -36,14 +36,9 @@ async function registerAndLogin(agent, payload, registerPath = "/api/auth/regist
   return loginRes.body.user;
 }
 
-// Provider.status defaults to "PENDING"; approved providers are "APPROVED".
-async function loginAsProvider(agent, prefix, status = "PENDING") {
+async function loginAsProvider(agent, prefix) {
   const payload = { ...uniqueUser(prefix), idCard: "1234567890123" };
-  const user = await registerAndLogin(agent, payload, "/api/auth/register/provider");
-  if (status !== "PENDING") {
-    await prisma.provider.update({ where: { userId: user.id }, data: { status } });
-  }
-  return user;
+  return registerAndLogin(agent, payload, "/api/auth/register/provider");
 }
 
 const validService = () => ({
@@ -51,6 +46,8 @@ const validService = () => ({
   description: "We'll eat our way down Yaowarat Road.",
   location: "Bangkok – Yaowarat & Old Town",
   rate: 450,
+  startTime: "09:00",
+  endTime: "17:00",
 });
 
 describe("POST /api/services", () => {
@@ -70,15 +67,14 @@ describe("POST /api/services", () => {
       expect(res.body.error).toMatch(/provider/i);
     });
 
-    it("rejects a provider who is still pending approval", async () => {
+    it("lets a newly registered provider publish straight away (no approval step)", async () => {
       const agent = request.agent(app);
-      const provider = await loginAsProvider(agent, "svc_pending");
+      const provider = await loginAsProvider(agent, "svc_new_provider");
 
       const res = await agent.post("/api/services").send(validService());
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/approved/i);
-      expect(await prisma.service.count({ where: { providerId: provider.id } })).toBe(0);
+      expect(res.status).toBe(201);
+      expect(res.body.service.providerId).toBe(provider.id);
     });
   });
 
@@ -88,7 +84,7 @@ describe("POST /api/services", () => {
 
     beforeAll(async () => {
       agent = request.agent(app);
-      provider = await loginAsProvider(agent, "svc_approved", "APPROVED");
+      provider = await loginAsProvider(agent, "svc_provider");
     });
 
     it("creates the service for the signed-in provider and returns 201", async () => {
@@ -102,10 +98,20 @@ describe("POST /api/services", () => {
         description: "We'll eat our way down Yaowarat Road.",
         location: "Bangkok – Yaowarat & Old Town",
         rate: 450,
+        rateUnit: "hour",
+        startTime: "09:00",
+        endTime: "17:00",
+        coverPhotoUrl: null,
+        categoryIds: [],
       });
 
       const saved = await prisma.service.findUnique({ where: { id: res.body.service.id } });
-      expect(saved).toMatchObject({ providerId: provider.id, title: "Old Town street food walk" });
+      expect(saved).toMatchObject({
+        providerId: provider.id,
+        title: "Old Town street food walk",
+        startTime: "09:00",
+        endTime: "17:00",
+      });
       expect(Number(saved.rate)).toBe(450);
     });
 
@@ -163,13 +169,89 @@ describe("POST /api/services", () => {
     });
   });
 
+  describe("service details (rate unit, hours, cover photo, categories)", () => {
+    let agent;
+    const categoryIds = [];
+
+    beforeAll(async () => {
+      agent = request.agent(app);
+      await loginAsProvider(agent, "svc_details");
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      for (const name of ["Food", "Photo"]) {
+        const category = await prisma.category.create({ data: { category: `${name} ${suffix}` } });
+        categoryIds.push(category.id);
+      }
+    });
+
+    afterAll(async () => {
+      await prisma.serviceCategory.deleteMany({ where: { categoryId: { in: categoryIds } } });
+      await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
+    });
+
+    it("saves and returns all of them", async () => {
+      const res = await agent.post("/api/services").send({
+        ...validService(),
+        rate: 2200,
+        rateUnit: "day",
+        startTime: "08:30",
+        endTime: "17:00",
+        coverPhotoUrl: "/uploads/image-123.jpg",
+        categoryIds,
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.service).toMatchObject({
+        rate: 2200,
+        rateUnit: "day",
+        startTime: "08:30",
+        endTime: "17:00",
+        coverPhotoUrl: "/uploads/image-123.jpg",
+      });
+      expect([...res.body.service.categoryIds].sort()).toEqual([...categoryIds].sort());
+
+      const saved = await prisma.service.findUnique({
+        where: { id: res.body.service.id },
+        include: { serviceCategories: true },
+      });
+      expect(saved).toMatchObject({ rateUnit: "day", startTime: "08:30", endTime: "17:00" });
+      expect(saved.serviceCategories).toHaveLength(2);
+    });
+
+    it("ignores a repeated category", async () => {
+      const res = await agent
+        .post("/api/services")
+        .send({ ...validService(), categoryIds: [categoryIds[0], categoryIds[0]] });
+
+      expect(res.status).toBe(201);
+      expect(res.body.service.categoryIds).toEqual([categoryIds[0]]);
+    });
+
+    it("defaults to per hour and treats an empty photo as none", async () => {
+      const res = await agent
+        .post("/api/services")
+        .send({ ...validService(), rateUnit: "", coverPhotoUrl: "" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.service).toMatchObject({ rateUnit: "hour", coverPhotoUrl: null });
+    });
+
+    it("rejects empty service hours (they're required)", async () => {
+      const res = await agent
+        .post("/api/services")
+        .send({ ...validService(), startTime: "", endTime: "" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.errors).toEqual({ startTime: "startTime must be a valid time in HH:MM format" });
+    });
+  });
+
   describe("validation", () => {
     let agent;
     let provider;
 
     beforeAll(async () => {
       agent = request.agent(app);
-      provider = await loginAsProvider(agent, "svc_validation", "APPROVED");
+      provider = await loginAsProvider(agent, "svc_validation");
     });
 
     afterAll(async () => {
@@ -192,11 +274,28 @@ describe("POST /api/services", () => {
       ["rate is a string", { rate: "450" }, /rate must be a positive number/],
       ["rate is over the column limit", { rate: 100000000 }, /rate must be a positive number/],
       ["rate has 3 decimal places", { rate: 450.123 }, /at most 2 decimal places/],
+      ["rateUnit is not hour or day", { rateUnit: "week" }, /rateUnit must be "hour" or "day"/],
+      ["start time is missing", { startTime: undefined }, /startTime must be a valid time/],
+      ["start time is malformed", { startTime: "9:00" }, /startTime must be a valid time/],
+      ["start time is out of range", { startTime: "24:00" }, /startTime must be a valid time/],
+      ["end time is missing", { endTime: undefined }, /endTime must be a valid time/],
+      ["end time is malformed", { endTime: "17:60" }, /endTime must be a valid time/],
+      ["end time is the same as start time", { endTime: "09:00" }, /after the start time/],
+      ["end time is before start time", { endTime: "08:59" }, /after the start time/],
+      ["coverPhotoUrl is not a string", { coverPhotoUrl: 42 }, /coverPhotoUrl must be a string/],
+      ["categoryIds is not an array", { categoryIds: "food" }, /categoryIds must be an array/],
+      [
+        "categoryIds has an unknown category",
+        { categoryIds: ["00000000-0000-0000-0000-000000000000"] },
+        /unknown category/,
+      ],
     ])("returns 400 when the %s", async (_label, override, message) => {
       const res = await agent.post("/api/services").send({ ...validService(), ...override });
 
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(message);
+      // The same message, keyed by the field, for forms.
+      expect(Object.values(res.body.errors)).toEqual([res.body.error]);
     });
 
     it("returns 400 for an empty body", async () => {
