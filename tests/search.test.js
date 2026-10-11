@@ -116,4 +116,40 @@ describe("GET /api/services/search", () => {
     const { titles } = await search({ minPrice: 500, maxPrice: 800 });
     expect(titles).toEqual(["photo walk"]);
   });
+
+  describe("price range validation (US5-2)", () => {
+    it("rejects a minimum price above the maximum without running the search", async () => {
+      const { res } = await search({ minPrice: 1000, maxPrice: 500 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Minimum price must not exceed maximum price");
+      expect(res.body.data).toBeUndefined();
+    });
+
+    it("accepts an equal minimum and maximum", async () => {
+      const { res, titles } = await search({ minPrice: 600, maxPrice: 600 });
+
+      expect(res.status).toBe(200);
+      expect(titles).toEqual(["photo walk"]);
+    });
+
+    it("accepts only a minimum or only a maximum", async () => {
+      expect((await search({ minPrice: 800 })).titles).toEqual(["night market"]);
+      expect((await search({ maxPrice: 500 })).titles).toEqual(["street food"]);
+    });
+
+    it("rejects a price that isn't a number", async () => {
+      const { res } = await search({ minPrice: "abc" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/minPrice/);
+    });
+
+    it("rejects a negative price", async () => {
+      const { res } = await search({ maxPrice: -1 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/maxPrice/);
+    });
+  });
 });
