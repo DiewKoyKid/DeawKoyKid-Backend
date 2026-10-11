@@ -11,8 +11,11 @@ function isNonEmptyString(value) {
 }
 
 const RATE_UNITS = ["hour", "day"];
+
 // "HH:MM", 00:00-23:59. Zero-padded, so times compare correctly as strings.
-const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+function isValidTime(value) {
+  return typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+}
 
 const isGiven = (value) => value !== undefined && value !== null && value !== "";
 
@@ -53,18 +56,15 @@ function validateServiceBody({
     return invalid("rateUnit", 'rateUnit must be "hour" or "day"');
   }
 
-  // Service hours are optional, but come as a pair and end after they start.
-  if (isGiven(startTime) && !TIME_PATTERN.test(startTime)) {
-    return invalid("startTime", "startTime must be a time like 09:00");
+  // Service hours are required, "HH:MM", and end after they start.
+  if (!isValidTime(startTime)) {
+    return invalid("startTime", "startTime must be a valid time in HH:MM format");
   }
-  if (isGiven(endTime) && !TIME_PATTERN.test(endTime)) {
-    return invalid("endTime", "endTime must be a time like 17:00");
+  if (!isValidTime(endTime)) {
+    return invalid("endTime", "endTime must be a valid time in HH:MM format");
   }
-  if (isGiven(startTime) !== isGiven(endTime)) {
-    return invalid(isGiven(startTime) ? "endTime" : "startTime", "startTime and endTime go together");
-  }
-  if (isGiven(startTime) && endTime <= startTime) {
-    return invalid("endTime", "endTime must be after startTime");
+  if (endTime <= startTime) {
+    return invalid("endTime", "End time must be after the start time");
   }
 
   if (isGiven(coverPhotoUrl) && typeof coverPhotoUrl !== "string") {
@@ -122,8 +122,8 @@ async function createService(req, res) {
         location: location.trim(),
         rate,
         rateUnit: rateUnit || "hour",
-        startTime: isGiven(startTime) ? startTime : null,
-        endTime: isGiven(endTime) ? endTime : null,
+        startTime,
+        endTime,
         coverPhotoUrl: isGiven(coverPhotoUrl) ? coverPhotoUrl : null,
         serviceCategories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
       },

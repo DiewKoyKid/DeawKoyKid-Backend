@@ -46,6 +46,8 @@ const validService = () => ({
   description: "We'll eat our way down Yaowarat Road.",
   location: "Bangkok – Yaowarat & Old Town",
   rate: 450,
+  startTime: "09:00",
+  endTime: "17:00",
 });
 
 describe("POST /api/services", () => {
@@ -97,14 +99,19 @@ describe("POST /api/services", () => {
         location: "Bangkok – Yaowarat & Old Town",
         rate: 450,
         rateUnit: "hour",
-        startTime: null,
-        endTime: null,
+        startTime: "09:00",
+        endTime: "17:00",
         coverPhotoUrl: null,
         categoryIds: [],
       });
 
       const saved = await prisma.service.findUnique({ where: { id: res.body.service.id } });
-      expect(saved).toMatchObject({ providerId: provider.id, title: "Old Town street food walk" });
+      expect(saved).toMatchObject({
+        providerId: provider.id,
+        title: "Old Town street food walk",
+        startTime: "09:00",
+        endTime: "17:00",
+      });
       expect(Number(saved.rate)).toBe(450);
     });
 
@@ -219,18 +226,22 @@ describe("POST /api/services", () => {
       expect(res.body.service.categoryIds).toEqual([categoryIds[0]]);
     });
 
-    it("defaults to per hour and treats empty hours and photo as none", async () => {
+    it("defaults to per hour and treats an empty photo as none", async () => {
       const res = await agent
         .post("/api/services")
-        .send({ ...validService(), rateUnit: "", startTime: "", endTime: "", coverPhotoUrl: "" });
+        .send({ ...validService(), rateUnit: "", coverPhotoUrl: "" });
 
       expect(res.status).toBe(201);
-      expect(res.body.service).toMatchObject({
-        rateUnit: "hour",
-        startTime: null,
-        endTime: null,
-        coverPhotoUrl: null,
-      });
+      expect(res.body.service).toMatchObject({ rateUnit: "hour", coverPhotoUrl: null });
+    });
+
+    it("rejects empty service hours (they're required)", async () => {
+      const res = await agent
+        .post("/api/services")
+        .send({ ...validService(), startTime: "", endTime: "" });
+
+      expect(res.status).toBe(400);
+      expect(res.body.errors).toEqual({ startTime: "startTime must be a valid time in HH:MM format" });
     });
   });
 
@@ -264,12 +275,13 @@ describe("POST /api/services", () => {
       ["rate is over the column limit", { rate: 100000000 }, /rate must be a positive number/],
       ["rate has 3 decimal places", { rate: 450.123 }, /at most 2 decimal places/],
       ["rateUnit is not hour or day", { rateUnit: "week" }, /rateUnit must be "hour" or "day"/],
-      ["startTime isn't HH:MM", { startTime: "9am", endTime: "17:00" }, /startTime must be a time/],
-      ["endTime isn't a real time", { startTime: "09:00", endTime: "25:00" }, /endTime must be a time/],
-      ["only startTime is given", { startTime: "09:00" }, /startTime and endTime go together/],
-      ["only endTime is given", { endTime: "17:00" }, /startTime and endTime go together/],
-      ["endTime is before startTime", { startTime: "17:00", endTime: "16:00" }, /endTime must be after startTime/],
-      ["endTime equals startTime", { startTime: "09:00", endTime: "09:00" }, /endTime must be after startTime/],
+      ["start time is missing", { startTime: undefined }, /startTime must be a valid time/],
+      ["start time is malformed", { startTime: "9:00" }, /startTime must be a valid time/],
+      ["start time is out of range", { startTime: "24:00" }, /startTime must be a valid time/],
+      ["end time is missing", { endTime: undefined }, /endTime must be a valid time/],
+      ["end time is malformed", { endTime: "17:60" }, /endTime must be a valid time/],
+      ["end time is the same as start time", { endTime: "09:00" }, /after the start time/],
+      ["end time is before start time", { endTime: "08:59" }, /after the start time/],
       ["coverPhotoUrl is not a string", { coverPhotoUrl: 42 }, /coverPhotoUrl must be a string/],
       ["categoryIds is not an array", { categoryIds: "food" }, /categoryIds must be an array/],
       [
