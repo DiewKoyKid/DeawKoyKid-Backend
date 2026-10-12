@@ -37,15 +37,13 @@ async function createService(req, res) {
   try {
     const { userId } = req.user; // attached by authenticateToken
 
+    // Any provider can publish; there is no approval step.
     const provider = await prisma.provider.findUnique({
       where: { userId },
-      select: { status: true },
+      select: { userId: true },
     });
     if (!provider) {
       return res.status(403).json({ error: "Provider access only." });
-    }
-    if (provider.status !== "APPROVED") {
-      return res.status(403).json({ error: "Only approved providers can create services." });
     }
 
     const error = validateServiceBody(req.body || {});

@@ -112,7 +112,8 @@ describe("POST /api/auth/register/provider", () => {
     const res = await request(app).post("/api/auth/register/provider").send(payload);
 
     expect(res.status).toBe(201);
-    expect(res.body.user.provider).toMatchObject({ status: "PENDING" });
+    expect(res.body.user.provider).toMatchObject({ idCard: payload.idCard });
+    expect(res.body.user.provider).not.toHaveProperty("status");
   });
 
   it("rejects a missing idCard", async () => {

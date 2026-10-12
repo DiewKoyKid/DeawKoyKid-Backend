@@ -190,8 +190,6 @@ async function registerProvider(req, res, next) {
 
     const hashedPassword = await hashPassword(password);
 
-    // status defaults to "PENDING" via the schema — not set explicitly here,
-    // so approval workflow (Admin flipping it to APPROVED) stays a separate concern
     const user = await prisma.user.create({
       data: {
         username,
@@ -229,7 +227,6 @@ async function registerProvider(req, res, next) {
         createdAt: true,
         provider: {
           select: {
-            status: true,
             idCard: true,
             bio: true,
             languages: true,

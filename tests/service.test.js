@@ -36,14 +36,9 @@ async function registerAndLogin(agent, payload, registerPath = "/api/auth/regist
   return loginRes.body.user;
 }
 
-// Provider.status defaults to "PENDING"; approved providers are "APPROVED".
-async function loginAsProvider(agent, prefix, status = "PENDING") {
+async function loginAsProvider(agent, prefix) {
   const payload = { ...uniqueUser(prefix), idCard: "1234567890123" };
-  const user = await registerAndLogin(agent, payload, "/api/auth/register/provider");
-  if (status !== "PENDING") {
-    await prisma.provider.update({ where: { userId: user.id }, data: { status } });
-  }
-  return user;
+  return registerAndLogin(agent, payload, "/api/auth/register/provider");
 }
 
 const validService = () => ({
@@ -70,15 +65,14 @@ describe("POST /api/services", () => {
       expect(res.body.error).toMatch(/provider/i);
     });
 
-    it("rejects a provider who is still pending approval", async () => {
+    it("lets a newly registered provider publish straight away (no approval step)", async () => {
       const agent = request.agent(app);
-      const provider = await loginAsProvider(agent, "svc_pending");
+      const provider = await loginAsProvider(agent, "svc_new_provider");
 
       const res = await agent.post("/api/services").send(validService());
 
-      expect(res.status).toBe(403);
-      expect(res.body.error).toMatch(/approved/i);
-      expect(await prisma.service.count({ where: { providerId: provider.id } })).toBe(0);
+      expect(res.status).toBe(201);
+      expect(res.body.service.providerId).toBe(provider.id);
     });
   });
 
@@ -88,7 +82,7 @@ describe("POST /api/services", () => {
 
     beforeAll(async () => {
       agent = request.agent(app);
-      provider = await loginAsProvider(agent, "svc_approved", "APPROVED");
+      provider = await loginAsProvider(agent, "svc_provider");
     });
 
     it("creates the service for the signed-in provider and returns 201", async () => {
@@ -169,7 +163,7 @@ describe("POST /api/services", () => {
 
     beforeAll(async () => {
       agent = request.agent(app);
-      provider = await loginAsProvider(agent, "svc_validation", "APPROVED");
+      provider = await loginAsProvider(agent, "svc_validation");
     });
 
     afterAll(async () => {
