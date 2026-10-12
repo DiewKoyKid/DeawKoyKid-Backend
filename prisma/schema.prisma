@@ -78,11 +78,25 @@ model Service {
   coverPhotoUrl String?
   isPublished   Boolean @default(true)
 
-  provider          Provider          @relation(fields: [providerId], references: [userId])
+  provider          Provider           @relation(fields: [providerId], references: [userId])
   serviceCategories ServiceCategory[]
   bookings          Booking[]
+  availabilitySlots AvailabilitySlot[]
 
   @@map("services")
+}
+
+model AvailabilitySlot {
+  id        String   @id @default(uuid())
+  serviceId String
+  date      DateTime @db.Date
+  startTime String   @db.VarChar(5)
+  endTime   String   @db.VarChar(5)
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, date, startTime, endTime])
+  @@map("availability_slots")
 }
 
 model Category {

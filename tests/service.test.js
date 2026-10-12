@@ -5,6 +5,7 @@ const prisma = require("../src/lib/prisma");
 
 const createdUsernames = [];
 const createdUserIds = [];
+const createdServiceIds = [];
 
 function uniqueUser(prefix) {
   const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -22,6 +23,8 @@ function uniqueUser(prefix) {
 
 afterAll(async () => {
   // Services don't cascade from users, so remove them first.
+  await prisma.booking.deleteMany({ where: { serviceId: { in: createdServiceIds } } });
+  await prisma.availabilitySlot.deleteMany({ where: { serviceId: { in: createdServiceIds } } });
   await prisma.service.deleteMany({ where: { providerId: { in: createdUserIds } } });
   await prisma.user.deleteMany({ where: { username: { in: createdUsernames } } });
   await prisma.$disconnect();
@@ -41,6 +44,21 @@ async function loginAsProvider(agent, prefix) {
   return registerAndLogin(agent, payload, "/api/auth/register/provider");
 }
 
+async function createTestService(providerId) {
+  const service = await prisma.service.create({
+    data: {
+      providerId,
+      title: "Availability test service",
+      location: "Bangkok",
+      rate: 100,
+      startTime: "08:00",
+      endTime: "18:00",
+    },
+  });
+  createdServiceIds.push(service.id);
+  return service;
+}
+
 const validService = () => ({
   title: "Old Town street food walk",
   description: "We'll eat our way down Yaowarat Road.",
@@ -48,6 +66,163 @@ const validService = () => ({
   rate: 450,
   startTime: "09:00",
   endTime: "17:00",
+});
+
+describe("POST /api/services/:id/availability", () => {
+  let providerAgent;
+  let provider;
+  let service;
+
+  beforeAll(async () => {
+    providerAgent = request.agent(app);
+    provider = await loginAsProvider(providerAgent, "availability_provider");
+    service = await createTestService(provider.id);
+  });
+
+  it("rejects unauthenticated requests", async () => {
+    const res = await request(app)
+      .post(`/api/services/${service.id}/availability`)
+      .send({ slots: [{ date: "2030-05-10", startTime: "09:00", endTime: "10:00" }] });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects requests from someone other than the service provider", async () => {
+    const otherAgent = request.agent(app);
+    await loginAsProvider(otherAgent, "availability_other");
+
+    const res = await otherAgent
+      .post(`/api/services/${service.id}/availability`)
+      .send({ slots: [{ date: "2030-05-10", startTime: "09:00", endTime: "10:00" }] });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("adds date-specific slots and returns them", async () => {
+    const res = await providerAgent
+      .post(`/api/services/${service.id}/availability`)
+      .send({
+        slots: [
+          { date: "2030-05-10", startTime: "09:00", endTime: "10:00" },
+          { date: "2030-05-10", startTime: "10:00", endTime: "11:00" },
+          { date: "2030-05-11", startTime: "13:00", endTime: "14:00" },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.slots).toEqual([
+      { id: expect.any(String), date: "2030-05-10", startTime: "09:00", endTime: "10:00" },
+      { id: expect.any(String), date: "2030-05-10", startTime: "10:00", endTime: "11:00" },
+      { id: expect.any(String), date: "2030-05-11", startTime: "13:00", endTime: "14:00" },
+    ]);
+    expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(3);
+  });
+
+  it("rejects overlapping slots in a request without saving any", async () => {
+    const res = await providerAgent
+      .post(`/api/services/${service.id}/availability`)
+      .send({
+        slots: [
+          { date: "2030-05-12", startTime: "09:00", endTime: "11:00" },
+          { date: "2030-05-12", startTime: "10:00", endTime: "12:00" },
+        ],
+      });
+
+    expect(res.status).toBe(409);
+    expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(3);
+  });
+
+  it("rejects a slot that overlaps previously saved availability", async () => {
+    const res = await providerAgent
+      .post(`/api/services/${service.id}/availability`)
+      .send({ slots: [{ date: "2030-05-10", startTime: "09:30", endTime: "10:30" }] });
+
+    expect(res.status).toBe(409);
+    expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(3);
+  });
+
+  it.each([
+    ["empty slots", { slots: [] }],
+    ["invalid calendar date", { slots: [{ date: "2030-02-30", startTime: "09:00", endTime: "10:00" }] }],
+    ["invalid time", { slots: [{ date: "2030-05-13", startTime: "9:00", endTime: "10:00" }] }],
+    ["non-positive time range", { slots: [{ date: "2030-05-13", startTime: "10:00", endTime: "10:00" }] }],
+  ])("rejects %s", async (_label, body) => {
+    const res = await providerAgent.post(`/api/services/${service.id}/availability`).send(body);
+
+    expect(res.status).toBe(400);
+    expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(3);
+  });
+});
+
+describe("PUT /api/services/:id/availability", () => {
+  let providerAgent;
+  let service;
+
+  beforeAll(async () => {
+    providerAgent = request.agent(app);
+    const provider = await loginAsProvider(providerAgent, "availability_put_provider");
+    service = await createTestService(provider.id);
+  });
+
+  it("replaces all slots with the submitted set", async () => {
+    await prisma.availabilitySlot.createMany({
+      data: [
+        { serviceId: service.id, date: new Date("2030-06-01T00:00:00.000Z"), startTime: "09:00", endTime: "10:00" },
+        { serviceId: service.id, date: new Date("2030-06-02T00:00:00.000Z"), startTime: "13:00", endTime: "14:00" },
+      ],
+    });
+
+    const res = await providerAgent.put(`/api/services/${service.id}/availability`).send({
+      slots: [
+        { date: "2030-06-01", startTime: "10:00", endTime: "11:30" },
+        { date: "2030-06-03", startTime: "15:00", endTime: "16:00" },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.slots).toEqual([
+      { id: expect.any(String), date: "2030-06-01", startTime: "10:00", endTime: "11:30" },
+      { id: expect.any(String), date: "2030-06-03", startTime: "15:00", endTime: "16:00" },
+    ]);
+    expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(2);
+  });
+
+  it("allows an empty slot array when there are no confirmed bookings", async () => {
+    const res = await providerAgent.put(`/api/services/${service.id}/availability`).send({ slots: [] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.slots).toEqual([]);
+    expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(0);
+  });
+
+  it("does not remove an available date with a confirmed booking", async () => {
+    await prisma.availabilitySlot.createMany({
+      data: [
+        { serviceId: service.id, date: new Date("2030-06-01T00:00:00.000Z"), startTime: "09:00", endTime: "10:00" },
+        { serviceId: service.id, date: new Date("2030-06-02T00:00:00.000Z"), startTime: "13:00", endTime: "14:00" },
+      ],
+    });
+    const customer = await registerAndLogin(request.agent(app), uniqueUser("availability_put_customer"));
+    const bookingDate = new Date();
+    const booking = await prisma.booking.create({
+      data: {
+        serviceId: service.id,
+        customerId: customer.id,
+        bookingDate: new Date(Date.UTC(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate())),
+        appointmentDate: new Date("2030-06-01T00:00:00.000Z"),
+        bookingStatus: "Confirmed",
+      },
+    });
+
+    const res = await providerAgent.put(`/api/services/${service.id}/availability`).send({
+      slots: [{ date: "2030-06-02", startTime: "13:00", endTime: "14:00" }],
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/confirmed booking/i);
+    expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(2);
+    await prisma.booking.delete({ where: { id: booking.id } });
+  });
 });
 
 describe("POST /api/services", () => {
