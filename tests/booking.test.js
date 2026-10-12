@@ -195,6 +195,158 @@ describe("POST /api/bookings (US6-1)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// US6-1 — overlapping and conflicting slots (F44)
+// A slot is one service on one appointmentDate; it is held by any booking
+// whose status is not in RELEASED_STATUSES.
+// ---------------------------------------------------------------------------
+describe("POST /api/bookings — overlapping and conflicting slots", () => {
+  // Another published service owned by the same provider
+  async function anotherServiceOf(providerId) {
+    const service = await prisma.service.create({
+      data: { providerId, title: "Chinatown night market tour", location: "Bangkok", rate: 500 },
+    });
+    createdServiceIds.push(service.id);
+    return service;
+  }
+
+  function countOn(serviceId, date) {
+    return prisma.booking.count({
+      where: { serviceId, appointmentDate: new Date(`${date}T00:00:00.000Z`) },
+    });
+  }
+
+  describe("conflicts", () => {
+    it("returns 409 when the same customer books the same slot twice", async () => {
+      const { service } = await providerWithService();
+      const { agent } = await loginAsCustomer();
+      const date = dateFromToday(10);
+
+      expect((await book(agent, service.id, date)).status).toBe(201);
+      const res = await book(agent, service.id, date);
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe("This time slot is not available");
+      expect(await countOn(service.id, date)).toBe(1);
+    });
+
+    it("leaves the existing booking untouched when a conflicting request is refused", async () => {
+      const { service } = await providerWithService();
+      const first = await loginAsCustomer();
+      const second = await loginAsCustomer();
+      const date = dateFromToday(10);
+      const created = await book(first.agent, service.id, date);
+
+      await book(second.agent, service.id, date);
+
+      const stored = await prisma.booking.findUnique({ where: { id: created.body.booking.id } });
+      expect(stored).toMatchObject({
+        customerId: first.user.id,
+        bookingStatus: "Waiting for confirmation",
+      });
+    });
+
+    it("blocks the slot again once a released slot has been re-booked", async () => {
+      const { service } = await providerWithService();
+      const [first, second, third] = await Promise.all([1, 2, 3].map(() => loginAsCustomer()));
+      const date = dateFromToday(10);
+
+      const created = await book(first.agent, service.id, date);
+      await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus: "Rejected" } });
+      expect((await book(second.agent, service.id, date)).status).toBe(201);
+
+      expect((await book(third.agent, service.id, date)).status).toBe(409);
+      expect(await countOn(service.id, date)).toBe(2); // the rejected one plus the active one
+    });
+
+    it("lets only one of a customer's double-submitted requests through", async () => {
+      const { service } = await providerWithService();
+      const { agent } = await loginAsCustomer();
+      const date = dateFromToday(12);
+
+      const responses = await Promise.all([book(agent, service.id, date), book(agent, service.id, date)]);
+
+      expect(responses.map((r) => r.status).sort()).toEqual([201, 409]);
+      expect(await countOn(service.id, date)).toBe(1);
+    });
+  });
+
+  describe("released slots", () => {
+    it.each(["Rejected", "Expired", "Cancelled", "CANCELLED"])(
+      "frees the slot when the existing booking is %s",
+      async (bookingStatus) => {
+        const { service } = await providerWithService();
+        const first = await loginAsCustomer();
+        const second = await loginAsCustomer();
+        const date = dateFromToday(10);
+
+        const created = await book(first.agent, service.id, date);
+        await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus } });
+
+        expect((await book(second.agent, service.id, date)).status).toBe(201);
+      }
+    );
+  });
+
+  describe("no false conflicts", () => {
+    it("allows the days immediately before and after a booked date", async () => {
+      const { service } = await providerWithService();
+      const [first, before, after] = await Promise.all([1, 2, 3].map(() => loginAsCustomer()));
+
+      expect((await book(first.agent, service.id, dateFromToday(10))).status).toBe(201);
+      expect((await book(before.agent, service.id, dateFromToday(9))).status).toBe(201);
+      expect((await book(after.agent, service.id, dateFromToday(11))).status).toBe(201);
+    });
+
+    it("allows the same date on services of different providers", async () => {
+      const { service: serviceA } = await providerWithService();
+      const { service: serviceB } = await providerWithService();
+      const first = await loginAsCustomer();
+      const second = await loginAsCustomer();
+      const date = dateFromToday(10);
+
+      expect((await book(first.agent, serviceA.id, date)).status).toBe(201);
+      expect((await book(second.agent, serviceB.id, date)).status).toBe(201);
+    });
+
+    it("lets simultaneous requests for different dates of one service all through", async () => {
+      const { service } = await providerWithService();
+      const customers = await Promise.all([1, 2, 3, 4].map(() => loginAsCustomer()));
+
+      const responses = await Promise.all(
+        customers.map(({ agent }, i) => book(agent, service.id, dateFromToday(20 + i)))
+      );
+
+      expect(responses.map((r) => r.status)).toEqual([201, 201, 201, 201]);
+    });
+  });
+
+  // Not decided yet: today a slot is per service, so these currently get 201.
+  // Un-skip whichever the team agrees on, together with the controller change.
+  describe("pending a decision on cross-service conflicts", () => {
+    it.skip("returns 409 when the provider is already booked that date on another of their services", async () => {
+      const { user: provider, service } = await providerWithService();
+      const other = await anotherServiceOf(provider.id);
+      const first = await loginAsCustomer();
+      const second = await loginAsCustomer();
+      const date = dateFromToday(10);
+
+      expect((await book(first.agent, service.id, date)).status).toBe(201);
+      expect((await book(second.agent, other.id, date)).status).toBe(409);
+    });
+
+    it.skip("returns 409 when the customer already has a booking with another provider that date", async () => {
+      const { service: serviceA } = await providerWithService();
+      const { service: serviceB } = await providerWithService();
+      const { agent } = await loginAsCustomer();
+      const date = dateFromToday(10);
+
+      expect((await book(agent, serviceA.id, date)).status).toBe(201);
+      expect((await book(agent, serviceB.id, date)).status).toBe(409);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // US6-1 — notify the provider of a new request (F43)
 // ---------------------------------------------------------------------------
 describe("provider notification on a new booking (US6-1, F43)", () => {
