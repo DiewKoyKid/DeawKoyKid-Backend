@@ -152,4 +152,31 @@ describe("GET /api/services/search", () => {
       expect(res.body.error).toMatch(/maxPrice/);
     });
   });
+
+  describe("age and rating validation (US5-2)", () => {
+    it("rejects a minimum age above the maximum", async () => {
+      const { res } = await search({ minAge: 40, maxAge: 20 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("Minimum age must not exceed maximum age");
+    });
+
+    it("rejects an age that isn't a whole number", async () => {
+      expect((await search({ minAge: "abc" })).res.status).toBe(400);
+      expect((await search({ maxAge: 20.5 })).res.status).toBe(400);
+    });
+
+    it("rejects a rating outside 0 to 5", async () => {
+      const { res } = await search({ minRating: 6 });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/minRating/);
+    });
+
+    it("still searches with a valid age range", async () => {
+      const { res } = await search({ minAge: 18, maxAge: 60 });
+
+      expect(res.status).toBe(200);
+    });
+  });
 });

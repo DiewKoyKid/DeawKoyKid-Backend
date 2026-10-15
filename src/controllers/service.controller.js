@@ -278,6 +278,24 @@ async function searchServices(req, res) {
       return res.status(400).json({ error: "Minimum price must not exceed maximum price" });
     }
 
+    // Age range — whole years, checked the same way as the price range
+    const ageMin = minAge ? Number(minAge) : undefined;
+    const ageMax = maxAge ? Number(maxAge) : undefined;
+    for (const [name, value] of [["minAge", ageMin], ["maxAge", ageMax]]) {
+      if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+        return res.status(400).json({ error: `${name} must be a non-negative whole number` });
+      }
+    }
+    if (ageMin !== undefined && ageMax !== undefined && ageMin > ageMax) {
+      return res.status(400).json({ error: "Minimum age must not exceed maximum age" });
+    }
+
+    // Rating — stars from 0 to 5
+    const ratingMin = minRating ? Number(minRating) : undefined;
+    if (ratingMin !== undefined && (!Number.isFinite(ratingMin) || ratingMin < 0 || ratingMin > 5)) {
+      return res.status(400).json({ error: "minRating must be a number from 0 to 5" });
+    }
+
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.max(1, parseInt(limit, 10) || 10);
     const skip = (pageNum - 1) * limitNum;
@@ -311,8 +329,8 @@ async function searchServices(req, res) {
     let hasProviderFilter = false;
     let hasUserFilter = false;
 
-    if (minRating) {
-      providerWhere.avgRating = { gte: parseFloat(minRating) };
+    if (ratingMin !== undefined) {
+      providerWhere.avgRating = { gte: ratingMin };
       hasProviderFilter = true;
     }
 
@@ -325,17 +343,17 @@ async function searchServices(req, res) {
       hasUserFilter = true;
     }
 
-    if (minAge || maxAge) {
+    if (ageMin !== undefined || ageMax !== undefined) {
       const today = new Date();
-      if (minAge) {
+      if (ageMin !== undefined) {
         // e.g. minAge = 20 means born at least 20 years ago (so bdate <= 2006)
-        const maxDate = new Date(today.getFullYear() - parseInt(minAge, 10), today.getMonth(), today.getDate());
+        const maxDate = new Date(today.getFullYear() - ageMin, today.getMonth(), today.getDate());
         userWhere.bdate = { ...userWhere.bdate, lte: maxDate };
         hasUserFilter = true;
       }
-      if (maxAge) {
+      if (ageMax !== undefined) {
         // e.g. maxAge = 35 means born at most 35 years ago (so bdate >= 1991)
-        const minDate = new Date(today.getFullYear() - parseInt(maxAge, 10) - 1, today.getMonth(), today.getDate() + 1);
+        const minDate = new Date(today.getFullYear() - ageMax - 1, today.getMonth(), today.getDate() + 1);
         userWhere.bdate = { ...userWhere.bdate, gte: minDate };
         hasUserFilter = true;
       }
