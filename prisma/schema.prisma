@@ -34,6 +34,7 @@ model User {
   customer     Customer?
   reports      Report[]
   sentChatLogs ChatLog[] @relation("ChatLogSender")
+  notifications Notification[]
 
   @@map("users")
 }
@@ -132,6 +133,7 @@ model Booking {
   customer Customer  @relation(fields: [customerId], references: [userId])
   reviews  Review[]
   chatLogs ChatLog[]
+  notifications Notification[]
 
   @@map("bookings")
 }
@@ -172,4 +174,22 @@ model ChatLog {
   sender  User    @relation("ChatLogSender", fields: [senderId], references: [id])
 
   @@map("chat_logs")
+}
+
+// Minimal in-app notification store, needed so a new booking can notify its
+// provider (Sprint 2 F43). Den's F52 owns this table and the status-change hook.
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  bookingId String?
+  type      String   @db.VarChar(40)
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
 }
