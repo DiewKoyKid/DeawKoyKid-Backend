@@ -266,6 +266,18 @@ async function searchServices(req, res) {
       sortBy = "rating_desc"
     } = req.query;
 
+    // Price range — checked before any query, so an invalid range never runs a search
+    const priceMin = minPrice ? Number(minPrice) : undefined;
+    const priceMax = maxPrice ? Number(maxPrice) : undefined;
+    for (const [name, value] of [["minPrice", priceMin], ["maxPrice", priceMax]]) {
+      if (value !== undefined && (!Number.isFinite(value) || value < 0)) {
+        return res.status(400).json({ error: `${name} must be a non-negative number` });
+      }
+    }
+    if (priceMin !== undefined && priceMax !== undefined && priceMin > priceMax) {
+      return res.status(400).json({ error: "Minimum price must not exceed maximum price" });
+    }
+
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.max(1, parseInt(limit, 10) || 10);
     const skip = (pageNum - 1) * limitNum;
@@ -287,10 +299,10 @@ async function searchServices(req, res) {
     }
 
     // Price filter
-    if (minPrice || maxPrice) {
+    if (priceMin !== undefined || priceMax !== undefined) {
       where.rate = {};
-      if (minPrice) where.rate.gte = parseFloat(minPrice);
-      if (maxPrice) where.rate.lte = parseFloat(maxPrice);
+      if (priceMin !== undefined) where.rate.gte = priceMin;
+      if (priceMax !== undefined) where.rate.lte = priceMax;
     }
 
     // Provider filters (gender, age, rating)
