@@ -1,8 +1,8 @@
 const prisma = require("../lib/prisma");
+const { BookingStatus } = require("../utils/bookingStatus");
 
 // Booking statuses that should NOT count toward the monthly total
-// (adjust to match the values you actually store in bookingStatus)
-const EXCLUDED_STATUSES = ["CANCELLED"];
+const EXCLUDED_STATUSES = [BookingStatus.CANCELLED];
 
 // rateUnit is nullable (services created before it existed); those were per hour.
 const DEFAULT_RATE_UNIT = "hour";

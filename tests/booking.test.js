@@ -91,10 +91,10 @@ describe("POST /api/bookings (US6-1)", () => {
         customerId: user.id,
         appointmentDate,
         bookingDate: dateFromToday(0),
-        bookingStatus: "Waiting for confirmation",
+        bookingStatus: "WAITING_FOR_CONFIRMATION",
       });
       const stored = await prisma.booking.findUnique({ where: { id: res.body.booking.id } });
-      expect(stored.bookingStatus).toBe("Waiting for confirmation");
+      expect(stored.bookingStatus).toBe("WAITING_FOR_CONFIRMATION");
     });
 
     it("accepts today's date", async () => {
@@ -138,7 +138,7 @@ describe("POST /api/bookings (US6-1)", () => {
       const date = dateFromToday(10);
 
       const created = await book(first.agent, service.id, date);
-      await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus: "Confirmed" } });
+      await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus: "CONFIRMED" } });
 
       expect((await book(second.agent, service.id, date)).status).toBe(409);
     });
@@ -150,7 +150,7 @@ describe("POST /api/bookings (US6-1)", () => {
       const date = dateFromToday(10);
 
       const created = await book(first.agent, service.id, date);
-      await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus: "Rejected" } });
+      await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus: "REJECTED" } });
 
       expect((await book(second.agent, service.id, date)).status).toBe(201);
     });
@@ -241,7 +241,7 @@ describe("POST /api/bookings — overlapping and conflicting slots", () => {
       const stored = await prisma.booking.findUnique({ where: { id: created.body.booking.id } });
       expect(stored).toMatchObject({
         customerId: first.user.id,
-        bookingStatus: "Waiting for confirmation",
+        bookingStatus: "WAITING_FOR_CONFIRMATION",
       });
     });
 
@@ -251,7 +251,7 @@ describe("POST /api/bookings — overlapping and conflicting slots", () => {
       const date = dateFromToday(10);
 
       const created = await book(first.agent, service.id, date);
-      await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus: "Rejected" } });
+      await prisma.booking.update({ where: { id: created.body.booking.id }, data: { bookingStatus: "REJECTED" } });
       expect((await book(second.agent, service.id, date)).status).toBe(201);
 
       expect((await book(third.agent, service.id, date)).status).toBe(409);
@@ -271,7 +271,7 @@ describe("POST /api/bookings — overlapping and conflicting slots", () => {
   });
 
   describe("released slots", () => {
-    it.each(["Rejected", "Expired", "Cancelled", "CANCELLED"])(
+    it.each(["REJECTED", "EXPIRED", "CANCELLED"])(
       "frees the slot when the existing booking is %s",
       async (bookingStatus) => {
         const { service } = await providerWithService();

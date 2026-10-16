@@ -210,7 +210,7 @@ describe("PUT /api/services/:id/availability", () => {
         customerId: customer.id,
         bookingDate: new Date(Date.UTC(bookingDate.getFullYear(), bookingDate.getMonth(), bookingDate.getDate())),
         appointmentDate: new Date("2030-06-01T00:00:00.000Z"),
-        bookingStatus: "Confirmed",
+        bookingStatus: "CONFIRMED",
       },
     });
 

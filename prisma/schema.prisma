@@ -120,21 +120,37 @@ model ServiceCategory {
   @@map("service_categories")
 }
 
+enum BookingStatus {
+  WAITING_FOR_CONFIRMATION
+  CONFIRMED
+  REJECTED
+  EXPIRED
+  CANCELLED
+  COMPLETED
+}
+
 model Booking {
-  id              String   @id @default(uuid())
+  id              String        @id @default(uuid())
   serviceId       String
   customerId      String
-  bookingDate     DateTime @db.Date
-  appointmentDate DateTime @db.Date
-  bookingStatus   String   @db.VarChar(30)
+  bookingDate     DateTime      @db.Date
+  appointmentDate DateTime      @db.Date
+  startTime       String?       @db.VarChar(5)
+  endTime         String?       @db.VarChar(5)
+  bookingStatus   BookingStatus @default(WAITING_FOR_CONFIRMATION)
   duration        Int?
+  totalPrice      Decimal?      @db.Decimal(10, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt
 
-  service  Service   @relation(fields: [serviceId], references: [id])
-  customer Customer  @relation(fields: [customerId], references: [userId])
-  reviews  Review[]
-  chatLogs ChatLog[]
+  service       Service        @relation(fields: [serviceId], references: [id])
+  customer      Customer       @relation(fields: [customerId], references: [userId])
+  reviews       Review[]
+  chatLogs      ChatLog[]
   notifications Notification[]
 
+  @@index([serviceId, appointmentDate])
+  @@index([customerId])
   @@map("bookings")
 }
 
