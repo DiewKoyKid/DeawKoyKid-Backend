@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma");
+const { BookingStatus } = require("../utils/bookingStatus");
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -149,7 +150,7 @@ async function replaceAvailability(req, res) {
         const confirmedBookings = await transaction.booking.findMany({
           where: {
             serviceId: service.id,
-            bookingStatus: { equals: "confirmed", mode: "insensitive" },
+            bookingStatus: BookingStatus.CONFIRMED,
           },
           select: { appointmentDate: true },
         });

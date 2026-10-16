@@ -1,12 +1,6 @@
 const prisma = require("../lib/prisma");
 const { notifyProviderOfNewBooking } = require("../services/notification.service");
-
-// Every new booking waits for the provider to accept it
-const WAITING_FOR_CONFIRMATION = "Waiting for confirmation";
-
-// Bookings in these statuses no longer hold their slot. Matched loosely because
-// the status values aren't finalised yet (seed data uses "CANCELLED"/"COMPLETED").
-const RELEASED_STATUSES = ["Rejected", "Expired", "Cancelled", "CANCELLED"];
+const { BookingStatus, SLOT_HOLDING_STATUSES } = require("../utils/bookingStatus");
 
 // US6-1: one message for both a taken slot and a past date
 const SLOT_UNAVAILABLE = "This time slot is not available";
@@ -88,7 +82,7 @@ async function createBooking(req, res) {
         await tx.$queryRaw`SELECT 1 FROM "services" WHERE "id" = ${serviceId} FOR UPDATE`;
 
         const taken = await tx.booking.findFirst({
-          where: { serviceId, appointmentDate: appointment, bookingStatus: { notIn: RELEASED_STATUSES } },
+          where: { serviceId, appointmentDate: appointment, bookingStatus: { in: SLOT_HOLDING_STATUSES }},
           select: { id: true },
         });
         if (taken) throw new SlotTakenError();
@@ -99,7 +93,7 @@ async function createBooking(req, res) {
             customerId: userId,
             bookingDate: bookedOn,
             appointmentDate: appointment,
-            bookingStatus: WAITING_FOR_CONFIRMATION,
+            bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION,
             duration: duration ?? null,
           },
           select: {

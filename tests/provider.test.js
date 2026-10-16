@@ -102,9 +102,9 @@ describe("GET /api/providers/me/services", () => {
     });
     await prisma.booking.createMany({
       data: [
-        booking(midMonth(0), "PENDING"), // counts
+        booking(midMonth(0), "WAITING_FOR_CONFIRMATION"), // counts
         booking(midMonth(0), "CANCELLED"), // cancelled: doesn't count
-        booking(midMonth(-1), "PENDING"), // last month: doesn't count
+        booking(midMonth(-1), "WAITING_FOR_CONFIRMATION"), // last month: doesn't count
       ],
     });
 
