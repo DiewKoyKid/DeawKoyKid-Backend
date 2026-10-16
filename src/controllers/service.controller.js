@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma");
+const { SLOT_HOLDING_STATUSES } = require("../utils/bookingStatus");
 
 // Column limits from the services table in prisma/schema.prisma
 const TITLE_MAX = 150;
@@ -182,8 +183,16 @@ async function getServiceById(req, res) {
             user: { select: { firstname: true, lastname: true, profilePhotoUrl: true } },
           },
         },
+          availabilitySlots: {
+          where: { date: { gte: startOfToday() } },
+          select: { id: true, date: true, startTime: true, endTime: true },
+        },
         bookings: {
           select: {
+            appointmentDate: true,
+            startTime: true,
+            endTime: true,
+            bookingStatus: true,
             reviews: {
               select: {
                 id: true,
@@ -207,7 +216,7 @@ async function getServiceById(req, res) {
       return res.status(410).json({ error: "This service is no longer available." });
     }
 
-    const { isPublished, provider, rate, serviceCategories, bookings, ...rest } = service;
+const { isPublished, provider, rate, serviceCategories, bookings, availabilitySlots, ...rest } = service;
 
     // Flatten categories
     const categories = serviceCategories.map((c) => c.category.category);
@@ -233,6 +242,7 @@ async function getServiceById(req, res) {
         categories,
         reviewCount: reviews.length,
         reviews, // Note: returning reviews here so the frontend can use them
+        availableSlots: bookableSlots(availabilitySlots, bookings),
         provider: {
           firstname: provider.user.firstname,
           lastname: provider.user.lastname,
@@ -245,6 +255,31 @@ async function getServiceById(req, res) {
     console.error("getServiceById error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
+}
+function startOfToday() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
+
+function bookableSlots(slots, bookings) {
+  const holding = bookings.filter((b) => SLOT_HOLDING_STATUSES.includes(b.bookingStatus));
+  return slots
+    .map((slot) => {
+      const taken = holding.some(
+        (b) =>
+          b.appointmentDate.getTime() === slot.date.getTime() &&
+          (!b.startTime || (b.startTime < slot.endTime && slot.startTime < b.endTime))
+      );
+      return {
+        id: slot.id,
+        date: slot.date.toISOString().slice(0, 10),
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        available: !taken,
+      };
+    })
+    .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
 }
 // GET /api/services/search
 async function searchServices(req, res) {
