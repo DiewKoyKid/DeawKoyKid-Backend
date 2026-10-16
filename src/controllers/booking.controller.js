@@ -27,6 +27,27 @@ function today() {
 function toDateString(date) {
   return date.toISOString().slice(0, 10);
 }
+function minutesOf(time) {
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function priceFor(service, startTime, endTime) {
+  const rate = Number(service.rate);
+  if (service.rateUnit === "day") return rate;
+  if (!startTime || !endTime) return null;
+  const hours = (minutesOf(endTime) - minutesOf(startTime)) / 60;
+  return Math.round(rate * hours * 100) / 100;
+}
+
+function clashingBookingsWhere(serviceId, date, startTime, endTime) {
+  const where = { serviceId, appointmentDate: date, bookingStatus: { in: SLOT_HOLDING_STATUSES } };
+  if (!startTime) return where;
+  return {
+    ...where,
+    OR: [{ startTime: null }, { startTime: { lt: endTime }, endTime: { gt: startTime } }],
+  };
+}
 
 // POST /api/bookings
 async function createBooking(req, res) {
@@ -41,17 +62,23 @@ async function createBooking(req, res) {
       return res.status(403).json({ error: "Customer access only." });
     }
 
-    const { serviceId, appointmentDate, duration } = req.body || {};
+    const { serviceId, slotId, appointmentDate, duration } = req.body || {};
 
     if (typeof serviceId !== "string" || serviceId.trim() === "") {
       return res.status(400).json({ error: "serviceId is required" });
     }
-    const appointment = parseDate(appointmentDate);
-    if (!appointment) {
-      return res.status(400).json({ error: "appointmentDate must be a date in YYYY-MM-DD format" });
+        if (slotId !== undefined && slotId !== null && (typeof slotId !== "string" || slotId.trim() === "")) {
+      return res.status(400).json({ error: "slotId must be a string" });
+    }
+    let appointment = null;
+    if (!slotId) {
+      appointment = parseDate(appointmentDate);
+      if (!appointment) {
+        return res.status(400).json({ error: "appointmentDate must be a date in YYYY-MM-DD format" });
+      }
     }
     const bookedOn = today();
-    if (appointment < bookedOn) {
+    if (appointment && appointment < bookedOn) {
       return res.status(400).json({ error: SLOT_UNAVAILABLE });
     }
     if (duration !== undefined && duration !== null && (!Number.isInteger(duration) || duration <= 0)) {
@@ -60,7 +87,7 @@ async function createBooking(req, res) {
 
     const service = await prisma.service.findUnique({
       where: { id: serviceId },
-      select: { title: true, providerId: true, isPublished: true },
+      select: { title: true, providerId: true, isPublished: true, rate: true, rateUnit: true },
     });
     if (!service) {
       return res.status(404).json({ error: "Service not found." });
@@ -81,8 +108,21 @@ async function createBooking(req, res) {
         // customer's, and two people can't both take the same date.
         await tx.$queryRaw`SELECT 1 FROM "services" WHERE "id" = ${serviceId} FOR UPDATE`;
 
+        let startTime = null;
+        let endTime = null;
+        if (slotId) {
+          const slot = await tx.availabilitySlot.findFirst({
+            where: { id: slotId, serviceId },
+            select: { date: true, startTime: true, endTime: true },
+          });
+          if (!slot || slot.date < bookedOn) throw new SlotTakenError();
+          appointment = slot.date;
+          startTime = slot.startTime;
+          endTime = slot.endTime;
+        }
+
         const taken = await tx.booking.findFirst({
-          where: { serviceId, appointmentDate: appointment, bookingStatus: { in: SLOT_HOLDING_STATUSES }},
+          where: clashingBookingsWhere(serviceId, appointment, startTime, endTime),
           select: { id: true },
         });
         if (taken) throw new SlotTakenError();
@@ -93,6 +133,8 @@ async function createBooking(req, res) {
             customerId: userId,
             bookingDate: bookedOn,
             appointmentDate: appointment,
+            startTime,                                       
+            endTime,
             bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION,
             duration: duration ?? null,
           },
@@ -104,6 +146,9 @@ async function createBooking(req, res) {
             appointmentDate: true,
             bookingStatus: true,
             duration: true,
+            startTime: true,
+            endTime: true,
+            totalPrice: true,
           },
         });
 
@@ -129,6 +174,7 @@ async function createBooking(req, res) {
         ...booking,
         bookingDate: toDateString(booking.bookingDate),
         appointmentDate: toDateString(booking.appointmentDate),
+        totalPrice: booking.totalPrice === null ? null : Number(booking.totalPrice),
       },
     });
   } catch (err) {
