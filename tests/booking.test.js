@@ -2,6 +2,7 @@ require("dotenv").config();
 const request = require("supertest");
 const app = require("../src/app");
 const prisma = require("../src/lib/prisma");
+const { changeBookingStatus } = require("../src/services/booking.service");
 
 const createdUsernames = [];
 const createdServiceIds = [];
@@ -389,6 +390,105 @@ describe("provider notification on a new booking (US6-1, F43)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// US6-3 — status-change hook (F52)
+// changeBookingStatus is what F47's PATCH endpoint and F48's expiry call.
+// ---------------------------------------------------------------------------
+describe("booking status-change hook (F52)", () => {
+  // A booking waiting for confirmation, with the provider's NEW_BOOKING_REQUEST
+  // notification already in place
+  async function waitingBooking() {
+    const provider = await providerWithService();
+    const customer = await loginAsCustomer();
+    const res = await book(customer.agent, provider.service.id);
+    return { provider: provider.user, service: provider.service, customer: customer.user, bookingId: res.body.booking.id };
+  }
+
+  function statusNotificationsFor(userId) {
+    return prisma.notification.findMany({ where: { userId, type: { startsWith: "BOOKING_" } } });
+  }
+
+  it.each([
+    ["CONFIRMED", "BOOKING_CONFIRMED", "was confirmed"],
+    ["REJECTED", "BOOKING_REJECTED", "was rejected"],
+  ])("tells the customer when the provider changes the booking to %s", async (status, type, wording) => {
+    const { provider, service, customer, bookingId } = await waitingBooking();
+
+    const result = await changeBookingStatus(bookingId, status, { actorId: provider.id });
+
+    expect(result.booking.bookingStatus).toBe(status);
+    const stored = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(stored.bookingStatus).toBe(status);
+
+    const notifications = await statusNotificationsFor(customer.id);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({ bookingId, type, isRead: false });
+    expect(notifications[0].message).toContain(service.title);
+    expect(notifications[0].message).toContain(wording);
+    expect(await statusNotificationsFor(provider.id)).toHaveLength(0);
+  });
+
+  it("tells the provider, not the customer, when the customer cancels", async () => {
+    const { provider, customer, bookingId } = await waitingBooking();
+
+    await changeBookingStatus(bookingId, "CANCELLED", { actorId: customer.id });
+
+    expect(await statusNotificationsFor(customer.id)).toHaveLength(0);
+    const notifications = await statusNotificationsFor(provider.id);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({ bookingId, type: "BOOKING_CANCELLED" });
+  });
+
+  it("tells both sides about a change with no actor, such as expiry", async () => {
+    const { provider, customer, bookingId } = await waitingBooking();
+
+    const { notifications } = await changeBookingStatus(bookingId, "EXPIRED");
+
+    expect(notifications.map((n) => n.userId).sort()).toEqual([customer.id, provider.id].sort());
+    expect(notifications.every((n) => n.type === "BOOKING_EXPIRED")).toBe(true);
+  });
+
+  it("sends nothing when the booking already has that status", async () => {
+    const { provider, customer, bookingId } = await waitingBooking();
+    await changeBookingStatus(bookingId, "CONFIRMED", { actorId: provider.id });
+
+    const result = await changeBookingStatus(bookingId, "CONFIRMED", { actorId: provider.id });
+
+    expect(result.notifications).toEqual([]);
+    expect(await statusNotificationsFor(customer.id)).toHaveLength(1);
+  });
+
+  it("notifies only once when the same change arrives twice at the same time", async () => {
+    const { provider, customer, bookingId } = await waitingBooking();
+
+    await Promise.all([
+      changeBookingStatus(bookingId, "CONFIRMED", { actorId: provider.id }),
+      changeBookingStatus(bookingId, "CONFIRMED", { actorId: provider.id }),
+    ]);
+
+    expect(await statusNotificationsFor(customer.id)).toHaveLength(1);
+  });
+
+  it("rolls the notification back with the status change", async () => {
+    const { provider, customer, bookingId } = await waitingBooking();
+
+    await expect(
+      prisma.$transaction(async (tx) => {
+        await changeBookingStatus(bookingId, "CONFIRMED", { actorId: provider.id, client: tx });
+        throw new Error("caller failed after the change");
+      })
+    ).rejects.toThrow("caller failed after the change");
+
+    const stored = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(stored.bookingStatus).toBe("WAITING_FOR_CONFIRMATION");
+    expect(await statusNotificationsFor(customer.id)).toHaveLength(0);
+  });
+
+  it("resolves to null for a booking that doesn't exist", async () => {
+    expect(await changeBookingStatus("00000000-0000-0000-0000-000000000000", "CONFIRMED")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // US6-2 — accept / reject / expired (F49)
 // Waiting on Alex: PATCH /api/bookings/:id/status (F47) and the 24-hour
 // expiry rule (F48). Fill these in against that API once it is merged.
@@ -403,7 +503,7 @@ describe("PATCH /api/bookings/:id/status (US6-2, F49)", () => {
 
 // ---------------------------------------------------------------------------
 // US6-3 — email turned off means in-app only (F54)
-// Waiting on Den's status-change hook (F52) and Max's email sending with the
+// The status-change hook (F52) is in; waiting on Max's email sending with the
 // user's email setting (F53).
 // ---------------------------------------------------------------------------
 describe("booking status notifications (US6-3, F54)", () => {

@@ -192,8 +192,9 @@ model ChatLog {
   @@map("chat_logs")
 }
 
-// Minimal in-app notification store, needed so a new booking can notify its
-// provider (Sprint 2 F43). Den's F52 owns this table and the status-change hook.
+// In-app notifications (F52). `type` is NEW_BOOKING_REQUEST (F43) or one of
+// BOOKING_STATUS_NOTIFICATION_TYPES in src/services/notification.service.js,
+// written by the status-change hook in the same transaction as the change.
 model Notification {
   id        String   @id @default(uuid())
   userId    String
@@ -207,5 +208,6 @@ model Notification {
   booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
+  @@index([bookingId])
   @@map("notifications")
 }
