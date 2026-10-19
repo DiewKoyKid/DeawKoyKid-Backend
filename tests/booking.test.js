@@ -3,6 +3,7 @@ const request = require("supertest");
 const app = require("../src/app");
 const prisma = require("../src/lib/prisma");
 const { changeBookingStatus } = require("../src/services/booking.service");
+const { expireUnansweredBooking } = require("../src/services/bookingExpiry.service");
 
 const createdUsernames = [];
 const createdServiceIds = [];
@@ -490,15 +491,180 @@ describe("booking status-change hook (F52)", () => {
 
 // ---------------------------------------------------------------------------
 // US6-2 — accept / reject / expired (F49)
-// Waiting on Alex: PATCH /api/bookings/:id/status (F47) and the 24-hour
-// expiry rule (F48). Fill these in against that API once it is merged.
+// Provider decisions (F47) and the 24-hour expiry rule (F48).
 // ---------------------------------------------------------------------------
 describe("PATCH /api/bookings/:id/status (US6-2, F49)", () => {
-  it.todo("accept: the provider accepts within 24 hours and the status becomes \"Confirmed\"");
-  it.todo("reject: the provider rejects a waiting request and the status becomes \"Rejected\"");
-  it.todo("expired: accepting a request unanswered for over 24 hours shows \"This request has expired\" and the status stays \"Expired\"");
-  it.todo("a request just under 24 hours old can still be accepted");
-  it.todo("only the service's provider can change the status (403 for anyone else)");
+  async function waitingBooking() {
+    const provider = await providerWithService();
+    const customer = await loginAsCustomer();
+    const res = await book(customer.agent, provider.service.id);
+    expect(res.status).toBe(201);
+    return { provider, customer, booking: res.body.booking };
+  }
+
+  function decide(agent, bookingId, status) {
+    return agent.patch(`/api/bookings/${bookingId}/status`).send({ status });
+  }
+
+  async function expectUnchanged(bookingId, status = "WAITING_FOR_CONFIRMATION") {
+    const stored = await prisma.booking.findUnique({ where: { id: bookingId } });
+    expect(stored.bookingStatus).toBe(status);
+    expect(await prisma.notification.count({ where: { bookingId, type: { startsWith: "BOOKING_" } } })).toBe(0);
+  }
+
+  it("requires authentication", async () => {
+    const res = await decide(request(app), "missing-booking", "CONFIRMED");
+    expect(res.status).toBe(401);
+  });
+
+  it.each(["CONFIRMED", "REJECTED"])("lets the service owner set %s and notifies the customer", async (status) => {
+    const { provider, customer, booking } = await waitingBooking();
+
+    const res = await decide(provider.agent, booking.id, status);
+
+    expect(res.status).toBe(200);
+    expect(res.body.booking).toEqual({ ...booking, bookingStatus: status });
+    const stored = await prisma.booking.findUnique({ where: { id: booking.id } });
+    expect(stored.bookingStatus).toBe(status);
+    const notifications = await prisma.notification.findMany({
+      where: { bookingId: booking.id, type: { startsWith: "BOOKING_" } },
+    });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({ userId: customer.user.id, type: `BOOKING_${status}` });
+  });
+
+  it("forbids the booking customer, another customer, and another provider", async () => {
+    const { provider, customer, booking } = await waitingBooking();
+    const otherCustomer = await loginAsCustomer();
+    const otherProvider = await providerWithService();
+
+    for (const { agent } of [customer, otherCustomer, otherProvider]) {
+      for (const status of ["CONFIRMED", "REJECTED"]) {
+        const res = await agent.patch(`/api/bookings/${booking.id}/status`).send({
+          status,
+          userId: provider.user.id,
+          providerId: provider.user.id,
+        });
+        expect(res.status).toBe(403);
+      }
+    }
+    await expectUnchanged(booking.id);
+  });
+
+  it("returns 404 for a missing booking", async () => {
+    const { agent } = await providerWithService();
+    const res = await decide(agent, "00000000-0000-0000-0000-000000000000", "CONFIRMED");
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects missing, malformed, and unsupported statuses without side effects", async () => {
+    const { provider, booking } = await waitingBooking();
+    for (const status of [undefined, null, "", "confirmed", "UNKNOWN", 1, {}, [], "EXPIRED", "CANCELLED", "COMPLETED", "WAITING_FOR_CONFIRMATION"]) {
+      expect((await decide(provider.agent, booking.id, status)).status).toBe(400);
+    }
+    expect((await provider.agent.patch(`/api/bookings/${booking.id}/status`)).status).toBe(400);
+    await expectUnchanged(booking.id);
+  });
+
+  it.each(["CONFIRMED", "REJECTED", "EXPIRED", "CANCELLED", "COMPLETED"])("does not overwrite a %s booking with another decision", async (status) => {
+    const { provider, booking } = await waitingBooking();
+    await prisma.booking.update({ where: { id: booking.id }, data: { bookingStatus: status } });
+
+    const res = await decide(provider.agent, booking.id, status === "CONFIRMED" ? "REJECTED" : "CONFIRMED");
+
+    expect(res.status).toBe(409);
+    if (status === "EXPIRED") expect(res.body.error).toBe("This request has expired");
+    await expectUnchanged(booking.id, status);
+  });
+
+  it("handles concurrent retries without duplicate notifications", async () => {
+    const { provider, customer, booking } = await waitingBooking();
+    const responses = await Promise.all([
+      decide(provider.agent, booking.id, "CONFIRMED"),
+      decide(provider.agent, booking.id, "CONFIRMED"),
+    ]);
+    expect(responses.map((res) => res.status)).toEqual([200, 200]);
+    expect(await prisma.notification.count({ where: { bookingId: booking.id, userId: customer.user.id } })).toBe(1);
+    expect((await decide(customer.agent, booking.id, "CONFIRMED")).status).toBe(403);
+  });
+
+  it("allows only one of two concurrent conflicting decisions", async () => {
+    const { provider, customer, booking } = await waitingBooking();
+    const responses = await Promise.all([
+      decide(provider.agent, booking.id, "CONFIRMED"),
+      decide(provider.agent, booking.id, "REJECTED"),
+    ]);
+    expect(responses.map((res) => res.status).sort()).toEqual([200, 409]);
+    const winner = responses.find((res) => res.status === 200).body.booking.bookingStatus;
+    const stored = await prisma.booking.findUnique({ where: { id: booking.id } });
+    expect(stored.bookingStatus).toBe(winner);
+    const notifications = await prisma.notification.findMany({ where: { bookingId: booking.id, userId: customer.user.id } });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].type).toBe(`BOOKING_${winner}`);
+  });
+
+  it.each(["CONFIRMED", "REJECTED"])("expires an overdue request instead of applying %s", async (status) => {
+    const { provider, customer, booking } = await waitingBooking();
+    await prisma.booking.update({
+      where: { id: booking.id }, data: { createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) },
+    });
+
+    const res = await decide(provider.agent, booking.id, status);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("This request has expired");
+    const stored = await prisma.booking.findUnique({ where: { id: booking.id } });
+    expect(stored.bookingStatus).toBe("EXPIRED");
+    expect((await decide(provider.agent, booking.id, status)).status).toBe(409);
+    const notifications = await prisma.notification.findMany({
+      where: { bookingId: booking.id, type: { startsWith: "BOOKING_" } },
+    });
+    expect(notifications).toHaveLength(2);
+    expect(notifications.every((n) => n.type === "BOOKING_EXPIRED")).toBe(true);
+    expect(notifications.map((n) => n.userId).sort()).toEqual([provider.user.id, customer.user.id].sort());
+
+    // An expired request no longer holds the service's slot.
+    expect((await book(customer.agent, provider.service.id, booking.appointmentDate)).status).toBe(201);
+  });
+
+  it.each([[1, 200, "CONFIRMED"], [0, 409, "EXPIRED"]])("enforces the boundary with %i ms remaining", async (remaining, statusCode, status) => {
+    const { provider, booking } = await waitingBooking();
+    const now = Date.now();
+    await prisma.booking.update({
+      where: { id: booking.id }, data: { createdAt: new Date(now - 24 * 60 * 60 * 1000 + remaining) },
+    });
+    const clock = jest.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      expect((await decide(provider.agent, booking.id, "CONFIRMED")).status).toBe(statusCode);
+      expect((await prisma.booking.findUnique({ where: { id: booking.id } })).bookingStatus).toBe(status);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("expires without a provider action and does not duplicate a concurrent expiry", async () => {
+    const { provider, booking } = await waitingBooking();
+    await prisma.booking.update({
+      where: { id: booking.id }, data: { createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) },
+    });
+    await Promise.all([expireUnansweredBooking(booking.id), expireUnansweredBooking(booking.id)]);
+    expect((await prisma.booking.findUnique({ where: { id: booking.id } })).bookingStatus).toBe("EXPIRED");
+    expect(await prisma.notification.count({ where: { bookingId: booking.id, type: "BOOKING_EXPIRED" } })).toBe(2);
+    expect((await decide(provider.agent, booking.id, "CONFIRMED")).status).toBe(409);
+  });
+
+  it("serializes expiry with an overdue provider decision", async () => {
+    const { provider, booking } = await waitingBooking();
+    await prisma.booking.update({
+      where: { id: booking.id }, data: { createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000) },
+    });
+    const [res] = await Promise.all([
+      decide(provider.agent, booking.id, "CONFIRMED"), expireUnansweredBooking(booking.id),
+    ]);
+    expect(res.status).toBe(409);
+    expect((await prisma.booking.findUnique({ where: { id: booking.id } })).bookingStatus).toBe("EXPIRED");
+    expect(await prisma.notification.count({ where: { bookingId: booking.id, type: "BOOKING_EXPIRED" } })).toBe(2);
+    expect(await prisma.notification.count({ where: { bookingId: booking.id, type: "BOOKING_CONFIRMED" } })).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

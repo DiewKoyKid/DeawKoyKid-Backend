@@ -13,4 +13,11 @@ const SLOT_HOLDING_STATUSES = [
   BookingStatus.CONFIRMED,
 ];
 
-module.exports = { BookingStatus, SLOT_HOLDING_STATUSES };
+const BOOKING_RESPONSE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function isUnansweredBookingExpired(booking, now = Date.now()) {
+  return booking.bookingStatus === BookingStatus.WAITING_FOR_CONFIRMATION &&
+    booking.createdAt.getTime() + BOOKING_RESPONSE_WINDOW_MS <= now;
+}
+
+module.exports = { BookingStatus, SLOT_HOLDING_STATUSES, BOOKING_RESPONSE_WINDOW_MS, isUnansweredBookingExpired };

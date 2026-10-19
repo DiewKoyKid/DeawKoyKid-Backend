@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const { notifyProviderOfNewBooking } = require("../services/notification.service");
-const { BookingStatus, SLOT_HOLDING_STATUSES } = require("../utils/bookingStatus");
+const { changeBookingStatus } = require("../services/booking.service");
+const { BookingStatus, SLOT_HOLDING_STATUSES, isUnansweredBookingExpired } = require("../utils/bookingStatus");
 
 // US6-1: one message for both a taken slot and a past date
 const SLOT_UNAVAILABLE = "This time slot is not available";
@@ -183,4 +184,60 @@ async function createBooking(req, res) {
   }
 }
 
-module.exports = { createBooking };
+// PATCH /api/bookings/:id/status — the service owner accepts or rejects a request.
+async function updateBookingStatus(req, res) {
+  const { status } = req.body || {};
+  if (![BookingStatus.CONFIRMED, BookingStatus.REJECTED].includes(status)) {
+    return res.status(400).json({ error: "status must be CONFIRMED or REJECTED" });
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Hold this lock through authorization, transition validation, and the
+      // status-change hook so concurrent decisions cannot overwrite each other.
+      await tx.$queryRaw`SELECT 1 FROM "bookings" WHERE "id" = ${req.params.id} FOR UPDATE`;
+      const current = await tx.booking.findUnique({
+        where: { id: req.params.id },
+        select: { bookingStatus: true, createdAt: true, service: { select: { providerId: true } } },
+      });
+      if (!current) {
+        return { statusCode: 404, error: "Booking not found." };
+      }
+      if (current.service.providerId !== req.user.userId) {
+        return { statusCode: 403, error: "Only the service provider can change the booking status." };
+      }
+      if (isUnansweredBookingExpired(current)) {
+        // Expiry is a system action: notify both parties, and commit it before
+        // returning the conflict response (throwing would roll it back).
+        await changeBookingStatus(req.params.id, BookingStatus.EXPIRED, { client: tx });
+        return { statusCode: 409, error: "This request has expired" };
+      }
+      if (current.bookingStatus === BookingStatus.EXPIRED) {
+        return { statusCode: 409, error: "This request has expired" };
+      }
+      // Retrying the same decision is harmless; the hook suppresses duplicate
+      // notifications. All other decisions require a waiting request.
+      if (current.bookingStatus !== BookingStatus.WAITING_FOR_CONFIRMATION && current.bookingStatus !== status) {
+        return { statusCode: 409, error: "Only a booking waiting for confirmation can be confirmed or rejected." };
+      }
+
+      return changeBookingStatus(req.params.id, status, { actorId: req.user.userId, client: tx });
+    });
+
+    if (result.error) return res.status(result.statusCode).json({ error: result.error });
+    const { booking } = result;
+    return res.status(200).json({
+      booking: {
+        ...booking,
+        bookingDate: toDateString(booking.bookingDate),
+        appointmentDate: toDateString(booking.appointmentDate),
+        totalPrice: booking.totalPrice === null ? null : Number(booking.totalPrice),
+      },
+    });
+  } catch (err) {
+    console.error("updateBookingStatus error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { createBooking, updateBookingStatus };
