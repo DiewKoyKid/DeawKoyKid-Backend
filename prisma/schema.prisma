@@ -151,6 +151,7 @@ model Booking {
 
   @@index([serviceId, appointmentDate])
   @@index([customerId])
+  @@index([bookingStatus, createdAt])
   @@map("bookings")
 }
 

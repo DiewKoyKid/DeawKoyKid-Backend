@@ -14,6 +14,32 @@ Backend RESTful API service สำหรับระบบค้นหาแล�
 * **Privacy & Consent:** การบันทึกและจัดการการยินยอมนโยบายความเป็นส่วนตัวและเงื่อนไขการใช้งาน
 * **Profile Management:** API สำหรับเรียกดูและอัปเดตข้อมูลโปรไฟล์ผู้ใช้งาน
 
+## Booking status API
+
+`PATCH /api/bookings/:id/status` requires authentication (the login cookie or a
+Bearer token). Only the provider who owns the booking's service may decide a request.
+
+Send `{ "status": "CONFIRMED" }` to accept or `{ "status": "REJECTED" }` to reject.
+A successful request returns `200` with `{ "booking": { ... } }` and creates an
+in-app notification for the customer. Repeating the same decision returns `200`
+without another notification. Other transitions require `WAITING_FOR_CONFIRMATION`.
+
+Errors: `400` for an invalid status, `401` without valid authentication, `403` for
+another user, `404` for a missing booking, and `409` for a conflicting decision or
+an expired/cancelled/completed booking.
+
+Unanswered requests expire exactly 24 hours after `createdAt` (elapsed time,
+independent of calendar dates or time zones). At or after that deadline, a provider
+decision commits `EXPIRED` and returns `409` with `"This request has expired"`.
+Both parties receive one in-app expiry notification. Already answered bookings
+keep their status.
+
+The server also checks for expired requests at startup and every minute, so
+unanswered requests expire without a provider action and release their slots.
+Background updates can lag the deadline by one polling interval; provider decisions
+always enforce the cutoff immediately. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
+to add the expiry lookup index.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
