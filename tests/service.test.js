@@ -44,7 +44,7 @@ async function loginAsProvider(agent, prefix) {
   return registerAndLogin(agent, payload, "/api/auth/register/provider");
 }
 
-async function createTestService(providerId) {
+async function createTestService(providerId, overrides = {}) {
   const service = await prisma.service.create({
     data: {
       providerId,
@@ -53,6 +53,7 @@ async function createTestService(providerId) {
       rate: 100,
       startTime: "08:00",
       endTime: "18:00",
+      ...overrides,
     },
   });
   createdServiceIds.push(service.id);
@@ -222,6 +223,85 @@ describe("PUT /api/services/:id/availability", () => {
     expect(res.body.error).toMatch(/confirmed booking/i);
     expect(await prisma.availabilitySlot.count({ where: { serviceId: service.id } })).toBe(2);
     await prisma.booking.delete({ where: { id: booking.id } });
+  });
+});
+
+describe("provider availability calendar API", () => {
+  let providerAgent;
+  let hourlyService;
+  let dailyService;
+
+  beforeAll(async () => {
+    providerAgent = request.agent(app);
+    const provider = await loginAsProvider(providerAgent, "avail_calendar");
+    hourlyService = await createTestService(provider.id, { rateUnit: "hour" });
+    dailyService = await createTestService(provider.id, { rateUnit: "day" });
+  });
+
+  it("reads and replaces hourly availability using the calendar shape", async () => {
+    await prisma.availabilitySlot.create({
+      data: {
+        serviceId: hourlyService.id,
+        date: new Date("2030-08-01T00:00:00.000Z"),
+        startTime: "09:00",
+        endTime: "10:00",
+      },
+    });
+
+    const read = await providerAgent.get(`/api/providers/me/services/${hourlyService.id}/availability`);
+    expect(read.status).toBe(200);
+    expect(read.body).toEqual({
+      openSlots: { "2030-08-01": ["09:00"] },
+      bookedSlots: {},
+    });
+
+    const updated = await providerAgent
+      .put(`/api/providers/me/services/${hourlyService.id}/availability`)
+      .send({ openSlots: { "2030-08-02": ["10:00", "11:00"] } });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual({
+      openSlots: { "2030-08-02": ["10:00", "11:00"] },
+      bookedSlots: {},
+    });
+    expect(
+      await prisma.availabilitySlot.findMany({
+        where: { serviceId: hourlyService.id },
+        orderBy: { startTime: "asc" },
+        select: { date: true, startTime: true, endTime: true },
+      })
+    ).toEqual([
+      { date: new Date("2030-08-02T00:00:00.000Z"), startTime: "10:00", endTime: "11:00" },
+      { date: new Date("2030-08-02T00:00:00.000Z"), startTime: "11:00", endTime: "12:00" },
+    ]);
+  });
+
+  it("reads and replaces day availability using the calendar shape", async () => {
+    await prisma.availabilitySlot.create({
+      data: {
+        serviceId: dailyService.id,
+        date: new Date("2030-09-01T00:00:00.000Z"),
+        startTime: "08:00",
+        endTime: "18:00",
+      },
+    });
+
+    const read = await providerAgent.get(`/api/providers/me/services/${dailyService.id}/availability`);
+    expect(read.status).toBe(200);
+    expect(read.body).toEqual({ openDates: ["2030-09-01"], bookedDates: [] });
+
+    const updated = await providerAgent
+      .put(`/api/providers/me/services/${dailyService.id}/availability`)
+      .send({ openDates: ["2030-09-02"] });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual({ openDates: ["2030-09-02"], bookedDates: [] });
+    expect(await prisma.availabilitySlot.findMany({ where: { serviceId: dailyService.id } })).toHaveLength(1);
+    expect(await prisma.availabilitySlot.findFirst({ where: { serviceId: dailyService.id } })).toMatchObject({
+      date: new Date("2030-09-02T00:00:00.000Z"),
+      startTime: "08:00",
+      endTime: "18:00",
+    });
   });
 });
 

@@ -47,6 +47,8 @@ async function getMyServices(req, res) {
         location: true,
         rate: true,
         rateUnit: true,
+        startTime: true,
+        endTime: true,
         coverPhotoUrl: true,
         isPublished: true,
         _count: {
