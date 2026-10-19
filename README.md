@@ -40,6 +40,16 @@ Background updates can lag the deadline by one polling interval; provider decisi
 always enforce the cutoff immediately. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
 to add the expiry lookup index.
 
+## In-app notifications API
+
+Authenticated users can list their notifications with `GET /api/notifications`.
+The response is `{ "notifications": [...] }`, ordered newest first. Each item
+includes its ID, booking ID, type, message, read state, and creation time.
+Use `PATCH /api/notifications/:id/read` to mark one of the caller's
+notifications as read, or `PATCH /api/notifications/read-all` to mark all of
+the caller's unread notifications as read. Both updates are idempotent, and a
+notification belonging to another user is not exposed.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
