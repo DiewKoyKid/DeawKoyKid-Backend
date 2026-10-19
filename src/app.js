@@ -1,8 +1,15 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const path = require("path");
+
 const authRoutes = require("./routes/auth.routes");
 const userRoutes = require("./routes/user.routes");
+const providerRoutes = require('./routes/provider.routes');
+const serviceRoutes = require("./routes/service.routes");
+const bookingRoutes = require("./routes/booking.routes");
+const uploadRoutes = require("./routes/upload.routes");
+const categoryRoutes = require("./routes/category.routes");
 
 const app = express();
 
@@ -15,12 +22,20 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// Serve static files from the public folder
+app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));
+
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
+app.use('/api/providers', providerRoutes);
+app.use("/api/services", serviceRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/upload", uploadRoutes);
+app.use("/api/categories", categoryRoutes);
 
 // 404 handler — must come AFTER all real routes are mounted,
 // otherwise every request matches this before reaching your routes

@@ -12,27 +12,29 @@ datasource db {
 }
 
 model User {
-  id          String    @id @default(uuid())
-  username    String    @unique @db.VarChar(50)
-  email       String?   @unique @db.VarChar(254)
-  password    String    @db.VarChar(255)
-  firstname   String    @db.VarChar(80)
-  lastname    String    @db.VarChar(80)
-  gender      String?   @db.Char(1)
-  bdate       DateTime? @db.Date
-  bankAccount String?   @db.VarChar(20)
-  phoneNumber String?   @db.VarChar(20)
-  instagram   String?   @db.VarChar(40)
-  line        String?   @db.VarChar(40)
-  facebook    String?   @db.VarChar(40)
-  consentAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  username        String    @unique @db.VarChar(50)
+  email           String?   @unique @db.VarChar(254)
+  password        String    @db.VarChar(255)
+  firstname       String    @db.VarChar(80)
+  lastname        String    @db.VarChar(80)
+  gender          String?   @db.Char(1)
+  bdate           DateTime? @db.Date
+  bankAccount     String?   @db.VarChar(20)
+  phoneNumber     String?   @db.VarChar(20)
+  instagram       String?   @db.VarChar(40)
+  line            String?   @db.VarChar(40)
+  facebook        String?   @db.VarChar(40)
+  profilePhotoUrl String?
+  consentAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   provider     Provider?
   customer     Customer?
   reports      Report[]
   sentChatLogs ChatLog[] @relation("ChatLogSender")
+  notifications Notification[]
 
   @@map("users")
 }
@@ -42,10 +44,11 @@ model Provider {
   idCard                String?  @db.VarChar(13)
   bio                   String?
   languages             String?  @db.VarChar(200)
+  interests             String[] @default([])
+  serviceArea           String[] @default([])
   avgRating             Decimal? @db.Decimal(3, 2)
   emergencyContactName  String?  @db.VarChar(80)
   emergencyContactPhone String?  @db.VarChar(20)
-  status                String   @default("PENDING") @db.VarChar(20)
 
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   services Service[]
@@ -64,18 +67,37 @@ model Customer {
 }
 
 model Service {
-  id          String  @id @default(uuid())
-  providerId  String
-  title       String  @db.VarChar(150)
-  description String?
-  location    String  @db.VarChar(200)
-  rate        Decimal @db.Decimal(10, 2)
+  id            String  @id @default(uuid())
+  providerId    String
+  title         String  @db.VarChar(150)
+  description   String?
+  location      String  @db.VarChar(200)
+  rate          Decimal @db.Decimal(10, 2)
+  rateUnit      String? @db.VarChar(50)
+  startTime     String? @db.VarChar(10)
+  endTime       String? @db.VarChar(10)
+  coverPhotoUrl String?
+  isPublished   Boolean @default(true)
 
-  provider          Provider          @relation(fields: [providerId], references: [userId])
+  provider          Provider           @relation(fields: [providerId], references: [userId])
   serviceCategories ServiceCategory[]
   bookings          Booking[]
+  availabilitySlots AvailabilitySlot[]
 
   @@map("services")
+}
+
+model AvailabilitySlot {
+  id        String   @id @default(uuid())
+  serviceId String
+  date      DateTime @db.Date
+  startTime String   @db.VarChar(5)
+  endTime   String   @db.VarChar(5)
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, date, startTime, endTime])
+  @@map("availability_slots")
 }
 
 model Category {
@@ -98,20 +120,37 @@ model ServiceCategory {
   @@map("service_categories")
 }
 
+enum BookingStatus {
+  WAITING_FOR_CONFIRMATION
+  CONFIRMED
+  REJECTED
+  EXPIRED
+  CANCELLED
+  COMPLETED
+}
+
 model Booking {
-  id              String   @id @default(uuid())
+  id              String        @id @default(uuid())
   serviceId       String
   customerId      String
-  bookingDate     DateTime @db.Date
-  appointmentDate DateTime @db.Date
-  bookingStatus   String   @db.VarChar(20)
+  bookingDate     DateTime      @db.Date
+  appointmentDate DateTime      @db.Date
+  startTime       String?       @db.VarChar(5)
+  endTime         String?       @db.VarChar(5)
+  bookingStatus   BookingStatus @default(WAITING_FOR_CONFIRMATION)
   duration        Int?
+  totalPrice      Decimal?      @db.Decimal(10, 2)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @default(now()) @updatedAt
 
-  service  Service   @relation(fields: [serviceId], references: [id])
-  customer Customer  @relation(fields: [customerId], references: [userId])
-  reviews  Review[]
-  chatLogs ChatLog[]
+  service       Service        @relation(fields: [serviceId], references: [id])
+  customer      Customer       @relation(fields: [customerId], references: [userId])
+  reviews       Review[]
+  chatLogs      ChatLog[]
+  notifications Notification[]
 
+  @@index([serviceId, appointmentDate])
+  @@index([customerId])
   @@map("bookings")
 }
 
@@ -151,4 +190,24 @@ model ChatLog {
   sender  User    @relation("ChatLogSender", fields: [senderId], references: [id])
 
   @@map("chat_logs")
+}
+
+// In-app notifications (F52). `type` is NEW_BOOKING_REQUEST (F43) or one of
+// BOOKING_STATUS_NOTIFICATION_TYPES in src/services/notification.service.js,
+// written by the status-change hook in the same transaction as the change.
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  bookingId String?
+  type      String   @db.VarChar(40)
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  booking Booking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([bookingId])
+  @@map("notifications")
 }

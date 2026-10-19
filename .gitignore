@@ -3,6 +3,10 @@ node_modules/
 .env.*
 !.env.example
 
-.npm-cache/
+# Profile photos uploaded by users (PUT /api/users/me/photo)
+public/uploads/profile-photos/
 
-prisma/migrations/
+# Cover photos uploaded through POST /api/upload land in public/uploads/.
+# Only the seed's sample photos are kept in git.
+public/uploads/*
+!public/uploads/services-cover-photo/
