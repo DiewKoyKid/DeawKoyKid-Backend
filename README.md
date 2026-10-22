@@ -50,6 +50,25 @@ notifications as read, or `PATCH /api/notifications/read-all` to mark all of
 the caller's unread notifications as read. Both updates are idempotent, and a
 notification belonging to another user is not exposed.
 
+## Reviews API
+
+`POST /api/reviews` requires authentication. The customer of a `COMPLETED`
+booking sends `{ "bookingId": "...", "rating": 1-5, "comment": "..." }` to review
+it once. `rating` must be a whole number; `comment` is optional, trimmed, at most
+1000 characters, and stored as `null` when blank.
+
+A successful request returns `201` with
+`{ "review": { "id", "bookingId", "rating", "comment", "timestamp" }, "provider": { "id", "avgRating", "reviewCount" } }`.
+In the same transaction the provider's `avgRating` is recalculated as the average
+of all reviews on their services, rounded to 2 decimals.
+
+Errors: `400` for an invalid body or a booking that isn't completed yet, `401`
+without valid authentication, `403` for another customer's booking, `404` for a
+missing booking, and `409` when the booking already has a review. There is no
+payment check because the project has no payment step. Apply migrations with
+`npx prisma migrate deploy --config prisma7.config.ts` to add the one-review-per-booking
+index and the rating check.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
