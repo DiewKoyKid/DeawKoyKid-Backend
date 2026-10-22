@@ -50,6 +50,33 @@ notifications as read, or `PATCH /api/notifications/read-all` to mark all of
 the caller's unread notifications as read. Both updates are idempotent, and a
 notification belonging to another user is not exposed.
 
+## Account deletion API
+
+`DELETE /api/users/me` requires authentication and the account password as
+`{ "password": "..." }`. It is refused while the user has a booking in progress
+(`WAITING_FOR_CONFIRMATION` or `CONFIRMED`), as the customer or as the provider
+of the booked service.
+
+A successful request returns `200` with `{ "message": "account deleted" }` and
+clears the login cookie. The account is soft-deleted: `deletedAt` is set and the
+row stays, so bookings and reviews still resolve, but the personal details are
+wiped (username becomes `deleted_<id>`, email is cleared so the address can
+register again, the name becomes "Deleted User"). Provider details are cleared
+except `avgRating`, the user's services are unpublished, their notifications
+are removed, and a confirmation email goes to the old address. A failed email
+is logged and does not fail the request.
+
+Errors: `400` without a password, `401` without valid authentication or with a
+wrong password, and `409` with `{ "error": "...", "bookings": [{ "id",
+"bookingStatus", "appointmentDate", "service": { "title" } }] }` listing the
+bookings in progress. Afterwards, tokens issued before the deletion return `401`
+`"account has been deleted"`, login fails, and `GET /api/users/:id` returns `404`.
+
+Email uses `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM`
+(see `.env.example`). Without `SMTP_HOST`, emails are logged to the console
+instead of sent. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
+to add `users.deletedAt`.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
