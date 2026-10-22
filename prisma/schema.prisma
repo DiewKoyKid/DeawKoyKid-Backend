@@ -155,13 +155,15 @@ model Booking {
   @@map("bookings")
 }
 
+// One review per booking (US8-1). rating is 1-5, enforced by a CHECK
+// constraint in the add_review_constraints migration.
 model Review {
   id         String   @id @default(uuid())
-  bookingId  String
+  bookingId  String   @unique
   customerId String
   rating     Int
   comment    String?
-  timestamp  DateTime
+  timestamp  DateTime @default(now())
 
   booking  Booking  @relation(fields: [bookingId], references: [id])
   customer Customer @relation(fields: [customerId], references: [userId])
