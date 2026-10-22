@@ -6,6 +6,7 @@ const { profilePhotoUpload } = require("../middlewares/profilePhotoUpload");
 
 router.get("/me", authenticateToken, userController.getMyProfile);
 router.put("/me", authenticateToken, userController.updateProfile);
+router.delete("/me", authenticateToken, userController.deleteMyAccount);
 router.post("/me/provider", authenticateToken, userController.addProviderProfile);
 router.put("/me/photo", authenticateToken, profilePhotoUpload, userController.uploadMyPhoto);
 router.delete("/me/photo", authenticateToken, userController.deleteMyPhoto);

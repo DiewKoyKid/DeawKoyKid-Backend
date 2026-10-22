@@ -2,6 +2,10 @@ const fs = require("fs/promises");
 const path = require("path");
 const prisma = require("../lib/prisma");
 const { rolesFor } = require("../utils/roles");
+const { comparePassword } = require("../utils/hash");
+const { clearAuthCookie } = require("./auth.controller");
+const { ActiveBookingsError, deleteAccount } = require("../services/accountDeletion.service");
+const { sendAccountDeletedEmail } = require("../services/mail.service");
 const {
   PROFILE_PHOTO_DIR,
   PROFILE_PHOTO_URL_PREFIX,
@@ -239,7 +243,7 @@ async function getPublicProfile(req, res, next) {
     // afterward, so a future field added to the schema can't leak
     // by accident.
     const user = await prisma.user.findUnique({
-      where: { id },
+      where: { id, deletedAt: null }, // deleted accounts (US2-3) are gone to everyone else
       select: {
         id: true,
         username: true,
@@ -351,6 +355,63 @@ async function deleteMyPhoto(req, res, next) {
   }
 }
 
+// DELETE /api/users/me (US2-3), body { password }
+// Re-authenticates, then deactivates and anonymises the account (see
+// accountDeletion.service.js), emails a confirmation and signs the user out.
+async function deleteMyAccount(req, res, next) {
+  try {
+    const currentUserId = req.user.userId;
+    const { password } = req.body || {};
+
+    if (typeof password !== "string" || !password) {
+      return res.status(400).json({ error: "password is required" });
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { id: currentUserId },
+      select: { password: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: "user not found" });
+    }
+    if (!(await comparePassword(password, existing.password))) {
+      return res.status(401).json({ error: "incorrect password" });
+    }
+
+    let deleted;
+    try {
+      deleted = await deleteAccount(currentUserId);
+    } catch (err) {
+      if (!(err instanceof ActiveBookingsError)) throw err;
+      return res.status(409).json({
+        error: "You have bookings in progress. Finish or cancel them before deleting your account.",
+        bookings: err.bookings.map((booking) => ({
+          ...booking,
+          appointmentDate: booking.appointmentDate.toISOString().slice(0, 10),
+        })),
+      });
+    }
+    if (!deleted) {
+      return res.status(404).json({ error: "user not found" });
+    }
+
+    // The account is gone either way, so a failed email doesn't fail the request
+    await removeStoredPhoto(deleted.profilePhotoUrl);
+    if (deleted.email) {
+      try {
+        await sendAccountDeletedEmail({ to: deleted.email, firstname: deleted.firstname });
+      } catch (err) {
+        console.error(`Account deletion email to user ${currentUserId} failed:`, err);
+      }
+    }
+
+    clearAuthCookie(res);
+    return res.status(200).json({ message: "account deleted" });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getMyProfile,
   updateProfile,
@@ -358,4 +419,5 @@ module.exports = {
   addProviderProfile,
   uploadMyPhoto,
   deleteMyPhoto,
+  deleteMyAccount,
 };

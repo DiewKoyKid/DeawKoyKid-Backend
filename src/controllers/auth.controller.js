@@ -265,7 +265,8 @@ async function login(req, res, next) {
       },
     });
 
-    if (!user) {
+    // A deleted account gets the same answer as an unknown one
+    if (!user || user.deletedAt) {
       return res.status(401).json({ error: "invalid email or password" });
     }
 
@@ -299,14 +300,19 @@ async function login(req, res, next) {
   }
 }
 
-function logout(req, res) {
+// Also used by account deletion (DELETE /api/users/me) to sign the user out
+function clearAuthCookie(res) {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
   });
+}
+
+function logout(req, res) {
+  clearAuthCookie(res);
 
   return res.status(200).json({ message: "logged out" });
 }
 
-module.exports = { register, registerProvider, login, logout };
+module.exports = { register, registerProvider, login, logout, clearAuthCookie };
