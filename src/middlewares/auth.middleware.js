@@ -1,6 +1,7 @@
+const prisma = require("../lib/prisma");
 const { verifyToken } = require("../utils/jwt");
 
-function authenticateToken(req, res, next) {
+async function authenticateToken(req, res, next) {
   const token =
     req.cookies?.token ||
     (req.headers.authorization && req.headers.authorization.split(" ")[1]);
@@ -9,13 +10,30 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: "Access denied. No token provided." });
   }
 
+  let decoded;
   try {
-    const decoded = verifyToken(token);
-    req.user = decoded; // แนบ { userId } เข้า req
-    next();
+    decoded = verifyToken(token);
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+
+  try {
+    // Tokens live 30 minutes, so one issued before the account was deleted
+    // (US2-3) is still validly signed. A user that doesn't exist is left to
+    // the route, as before.
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: { deletedAt: true },
+    });
+    if (user?.deletedAt) {
+      return res.status(401).json({ error: "account has been deleted" });
+    }
+  } catch (err) {
+    return next(err);
+  }
+
+  req.user = decoded; // แนบ { userId } เข้า req
+  next();
 }
 
 module.exports = { authenticateToken };

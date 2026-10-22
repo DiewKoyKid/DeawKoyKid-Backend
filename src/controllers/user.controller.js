@@ -239,7 +239,7 @@ async function getPublicProfile(req, res, next) {
     // afterward, so a future field added to the schema can't leak
     // by accident.
     const user = await prisma.user.findUnique({
-      where: { id },
+      where: { id, deletedAt: null }, // deleted accounts (US2-3) are gone to everyone else
       select: {
         id: true,
         username: true,

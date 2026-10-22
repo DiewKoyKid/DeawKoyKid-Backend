@@ -5,6 +5,7 @@ process.env.JWT_SECRET = "booking-status-test-secret";
 jest.mock("../src/lib/prisma", () => ({
   $transaction: jest.fn(),
   $queryRaw: jest.fn(),
+  user: { findUnique: jest.fn() },
   booking: { findUnique: jest.fn(), update: jest.fn() },
   notification: { createManyAndReturn: jest.fn() },
 }));

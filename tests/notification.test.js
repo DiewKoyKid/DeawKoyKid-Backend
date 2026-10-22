@@ -1,6 +1,7 @@
 process.env.JWT_SECRET = "notification-test-secret";
 
 jest.mock("../src/lib/prisma", () => ({
+  user: { findUnique: jest.fn() },
   notification: {
     findMany: jest.fn(),
     findFirst: jest.fn(),

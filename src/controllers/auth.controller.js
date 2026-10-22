@@ -265,7 +265,8 @@ async function login(req, res, next) {
       },
     });
 
-    if (!user) {
+    // A deleted account gets the same answer as an unknown one
+    if (!user || user.deletedAt) {
       return res.status(401).json({ error: "invalid email or password" });
     }
 
