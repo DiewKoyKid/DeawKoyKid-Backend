@@ -11,6 +11,7 @@ const bookingRoutes = require("./routes/booking.routes");
 const uploadRoutes = require("./routes/upload.routes");
 const categoryRoutes = require("./routes/category.routes");
 const notificationRoutes = require("./routes/notification.routes");
+const reviewRoutes = require("./routes/review.routes");
 
 const app = express();
 
@@ -38,6 +39,7 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/reviews", reviewRoutes);
 
 // 404 handler — must come AFTER all real routes are mounted,
 // otherwise every request matches this before reaching your routes
