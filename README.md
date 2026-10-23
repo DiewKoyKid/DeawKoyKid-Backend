@@ -40,6 +40,37 @@ Background updates can lag the deadline by one polling interval; provider decisi
 always enforce the cutoff immediately. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
 to add the expiry lookup index.
 
+## My bookings API
+
+`GET /api/bookings/me` requires authentication and returns the caller's bookings
+as the customer for the "My bookings" page:
+`{ "upcoming": [...], "past": [...] }`. `upcoming` holds bookings that are
+`WAITING_FOR_CONFIRMATION` or `CONFIRMED` and haven't started yet, soonest first;
+everything else (started, cancelled, rejected, expired, completed) is in `past`,
+most recent first.
+
+Each item has `id`, `bookingStatus`, `bookingDate`, `appointmentDate`,
+`startTime`, `endTime`, `duration`, `totalPrice`, `createdAt`, `startsAt` (ISO
+time the booking begins), `canCancel` (the same rule as the cancel endpoint
+below), `service: { id, title, location, coverPhotoUrl }` and
+`provider: { id, firstname, lastname, profilePhotoUrl }`.
+
+## Booking cancellation API
+
+`PATCH /api/bookings/:id/cancel` requires authentication and takes no body. Only
+the customer who made the booking may cancel it, and only while it is `CONFIRMED`
+and its booked time hasn't begun yet (the slot's `startTime` on the appointment
+date, or midnight for a booking without a slot, in the server's timezone).
+
+A successful request returns `200` with `{ "booking": { ... } }`, sets the status
+to `CANCELLED` (which frees the slot), and creates an in-app notification for the
+provider. Cancelling an already cancelled booking returns `200` without another
+notification.
+
+Errors: `401` without valid authentication, `403` for anyone but the booking's
+customer, `404` for a missing booking, and `409` for a booking that isn't
+confirmed or has already started.
+
 ## Reviews API
 
 `POST /api/reviews` requires authentication. The customer of a `COMPLETED`
