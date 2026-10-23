@@ -28,10 +28,26 @@ function isUnansweredBookingExpired(booking, now = Date.now()) {
     booking.createdAt.getTime() + BOOKING_RESPONSE_WINDOW_MS <= now;
 }
 
+// When the booked time begins, in the server's timezone (the same one used for
+// "today" when booking). A booking without a slot starts at midnight that day.
+function bookingStartsAt({ appointmentDate, startTime }) {
+  const [hours, minutes] = (startTime || "00:00").split(":").map(Number);
+  return new Date(
+    appointmentDate.getUTCFullYear(), appointmentDate.getUTCMonth(), appointmentDate.getUTCDate(),
+    hours, minutes,
+  );
+}
+
+function hasBookingStarted(booking, now = Date.now()) {
+  return bookingStartsAt(booking).getTime() <= now;
+}
+
 module.exports = {
   BookingStatus,
   SLOT_HOLDING_STATUSES,
   ACTIVE_BOOKING_STATUSES,
   BOOKING_RESPONSE_WINDOW_MS,
   isUnansweredBookingExpired,
+  bookingStartsAt,
+  hasBookingStarted,
 };

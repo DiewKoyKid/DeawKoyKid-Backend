@@ -1,7 +1,12 @@
 const prisma = require("../lib/prisma");
 const { notifyProviderOfNewBooking } = require("../services/notification.service");
 const { changeBookingStatus } = require("../services/booking.service");
-const { BookingStatus, SLOT_HOLDING_STATUSES, isUnansweredBookingExpired } = require("../utils/bookingStatus");
+const {
+  BookingStatus,
+  SLOT_HOLDING_STATUSES,
+  isUnansweredBookingExpired,
+  hasBookingStarted,
+} = require("../utils/bookingStatus");
 
 // US6-1: one message for both a taken slot and a past date
 const SLOT_UNAVAILABLE = "This time slot is not available";
@@ -240,4 +245,52 @@ async function updateBookingStatus(req, res) {
   }
 }
 
-module.exports = { createBooking, updateBookingStatus };
+// PATCH /api/bookings/:id/cancel — the customer cancels a confirmed booking
+// before its booked time begins. Cancelling releases the slot.
+async function cancelBooking(req, res) {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock before checking, so a concurrent decision or cancel can't slip in
+      // between the checks and the status change.
+      await tx.$queryRaw`SELECT 1 FROM "bookings" WHERE "id" = ${req.params.id} FOR UPDATE`;
+      const current = await tx.booking.findUnique({
+        where: { id: req.params.id },
+        select: { customerId: true, bookingStatus: true, appointmentDate: true, startTime: true },
+      });
+      if (!current) {
+        return { statusCode: 404, error: "Booking not found." };
+      }
+      if (current.customerId !== req.user.userId) {
+        return { statusCode: 403, error: "Only the customer who made the booking can cancel it." };
+      }
+      // Retrying a cancel is harmless; the hook suppresses duplicate notifications.
+      if (current.bookingStatus === BookingStatus.CANCELLED) {
+        return changeBookingStatus(req.params.id, BookingStatus.CANCELLED, { client: tx });
+      }
+      if (current.bookingStatus !== BookingStatus.CONFIRMED) {
+        return { statusCode: 409, error: "Only a confirmed booking can be cancelled." };
+      }
+      if (hasBookingStarted(current)) {
+        return { statusCode: 409, error: "This booking has already started and can no longer be cancelled." };
+      }
+
+      return changeBookingStatus(req.params.id, BookingStatus.CANCELLED, { actorId: req.user.userId, client: tx });
+    });
+
+    if (result.error) return res.status(result.statusCode).json({ error: result.error });
+    const { booking } = result;
+    return res.status(200).json({
+      booking: {
+        ...booking,
+        bookingDate: toDateString(booking.bookingDate),
+        appointmentDate: toDateString(booking.appointmentDate),
+        totalPrice: booking.totalPrice === null ? null : Number(booking.totalPrice),
+      },
+    });
+  } catch (err) {
+    console.error("cancelBooking error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { createBooking, updateBookingStatus, cancelBooking };
