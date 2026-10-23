@@ -40,6 +40,21 @@ Background updates can lag the deadline by one polling interval; provider decisi
 always enforce the cutoff immediately. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
 to add the expiry lookup index.
 
+## My bookings API
+
+`GET /api/bookings/me` requires authentication and returns the caller's bookings
+as the customer for the "My bookings" page:
+`{ "upcoming": [...], "past": [...] }`. `upcoming` holds bookings that are
+`WAITING_FOR_CONFIRMATION` or `CONFIRMED` and haven't started yet, soonest first;
+everything else (started, cancelled, rejected, expired, completed) is in `past`,
+most recent first.
+
+Each item has `id`, `bookingStatus`, `bookingDate`, `appointmentDate`,
+`startTime`, `endTime`, `duration`, `totalPrice`, `createdAt`, `startsAt` (ISO
+time the booking begins), `canCancel` (the same rule as the cancel endpoint
+below), `service: { id, title, location, coverPhotoUrl }` and
+`provider: { id, firstname, lastname, profilePhotoUrl }`.
+
 ## Booking cancellation API
 
 `PATCH /api/bookings/:id/cancel` requires authentication and takes no body. Only

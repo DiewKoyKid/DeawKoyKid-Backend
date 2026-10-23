@@ -4,7 +4,9 @@ const { changeBookingStatus } = require("../services/booking.service");
 const {
   BookingStatus,
   SLOT_HOLDING_STATUSES,
+  ACTIVE_BOOKING_STATUSES,
   isUnansweredBookingExpired,
+  bookingStartsAt,
   hasBookingStarted,
 } = require("../utils/bookingStatus");
 
@@ -293,4 +295,64 @@ async function cancelBooking(req, res) {
   }
 }
 
-module.exports = { createBooking, updateBookingStatus, cancelBooking };
+// GET /api/bookings/me — the signed-in customer's bookings for the "My bookings"
+// page (US6-4). Upcoming holds requests and confirmed bookings that haven't
+// started, soonest first; everything else is past, most recent first.
+async function getMyBookings(req, res) {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: { customerId: req.user.userId },
+      select: {
+        id: true,
+        bookingStatus: true,
+        bookingDate: true,
+        appointmentDate: true,
+        startTime: true,
+        endTime: true,
+        duration: true,
+        totalPrice: true,
+        createdAt: true,
+        service: {
+          select: {
+            id: true,
+            title: true,
+            location: true,
+            coverPhotoUrl: true,
+            provider: { select: { userId: true, user: { select: { firstname: true, lastname: true, profilePhotoUrl: true } } } },
+          },
+        },
+      },
+    });
+
+    const now = Date.now();
+    const upcoming = [];
+    const past = [];
+    for (const booking of bookings) {
+      const startsAt = bookingStartsAt(booking);
+      const started = startsAt.getTime() <= now;
+      const { provider, ...service } = booking.service;
+      const item = {
+        ...booking,
+        bookingDate: toDateString(booking.bookingDate),
+        appointmentDate: toDateString(booking.appointmentDate),
+        totalPrice: booking.totalPrice === null ? null : Number(booking.totalPrice),
+        createdAt: booking.createdAt.toISOString(),
+        startsAt: startsAt.toISOString(),
+        // Same rule PATCH /api/bookings/:id/cancel enforces
+        canCancel: booking.bookingStatus === BookingStatus.CONFIRMED && !started,
+        service,
+        provider: { id: provider.userId, ...provider.user },
+      };
+      (ACTIVE_BOOKING_STATUSES.includes(booking.bookingStatus) && !started ? upcoming : past).push(item);
+    }
+    upcoming.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+    past.sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+
+    return res.status(200).json({ upcoming, past });
+  } catch (err) {
+    console.error("getMyBookings error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { createBooking, updateBookingStatus, cancelBooking, getMyBookings };
