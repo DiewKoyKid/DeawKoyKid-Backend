@@ -96,6 +96,73 @@ Email uses `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM`
 instead of sent. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
 to add `users.deletedAt`.
 
+## Password reset API
+
+`POST /api/auth/forgot-password` takes `{ "email": "..." }` and emails a reset
+link (`<FRONTEND_URL>/reset-password?token=...`) to a registered, non-deleted
+account. It answers `200` with the same message whether or not the email is
+registered, so it can't be used to find out who has an account, and a failed
+email is logged without failing the request. `400` for a missing or malformed
+email. Requesting a new link voids the earlier ones.
+
+`POST /api/auth/reset-password` takes `{ "token": "...", "password": "..." }`
+(password at least 8 characters), sets the new password (bcrypt) and returns
+`200` `{ "message": "password updated" }`. The link works once and expires 15
+minutes after it was requested. Only a SHA-256 hash of the token is stored
+(`password_reset_tokens`). An unknown, expired or used token, or one for a
+deleted account, returns `400` `"this reset link is invalid or has expired"`
+and changes nothing. Apply migrations with `npx prisma migrate deploy` to add
+the table, then `npx prisma generate`.
+
+### Enabling real emails (SMTP)
+
+By default `SMTP_HOST` is empty, so no email is sent: the backend prints the
+message, including the password reset link, in its console instead. That is
+enough for development. To send real emails, point the backend at an SMTP
+server. These steps use a Gmail account.
+
+1. **Turn on 2-Step Verification** for the Gmail account at
+   <https://myaccount.google.com/security>. Google only offers app passwords
+   once it is on.
+2. **Create an app password** at <https://myaccount.google.com/apppasswords>.
+   Name it anything (e.g. `Togethr`) and copy the 16-letter code Google shows.
+   It is shown only once. Your normal Gmail password does **not** work over SMTP.
+3. **Edit `.env`** (copy it from `.env.example` first if you haven't). Remove the
+   spaces from the app password and don't add quotes or braces:
+   ```
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=your.address@gmail.com
+   SMTP_PASS=abcdefghijklmnop
+   MAIL_FROM="Togethr <your.address@gmail.com>"
+   FRONTEND_URL=http://localhost:5173
+   ```
+   - `MAIL_FROM` should use the same address as `SMTP_USER`; Gmail replaces any
+     other sender.
+   - Put comments on their own line, not after a value.
+   - `FRONTEND_URL` is the base of the link in the email
+     (`<FRONTEND_URL>/reset-password?token=...`). Use the real site URL when deployed.
+4. **Restart the backend.** nodemon does not watch `.env`, so type `rs` in its
+   terminal or stop and run `npm run dev` again.
+5. **Try it:** open `/forgot-password` on the frontend and enter the email of a
+   registered account, which must be an inbox you can open (seed and test accounts
+   use fake `@example.com` addresses). Check the spam folder if it doesn't arrive.
+
+Never commit `.env` or the app password (`.env` is already in `.gitignore`).
+Other SMTP providers work the same way with their own host, port, user and
+password. For testing without a real inbox, <https://ethereal.email> gives free
+throwaway SMTP credentials and a web inbox.
+
+**Troubleshooting.** The API answers `200` even when sending fails, so it
+doesn't reveal which emails are registered. Failures show only in the backend
+console as `password reset email failed`:
+- `535 ... Username and Password not accepted`: wrong `SMTP_USER`/`SMTP_PASS`, a
+  normal password instead of an app password, spaces or a trailing comment in
+  the value, or 2-Step Verification is off.
+- No error and no email: the address isn't registered to any account (check for
+  typos in the stored email), or the account is deleted.
+- Email arrives but the link opens the wrong site: fix `FRONTEND_URL`.
+
 ## 🚀 Getting Started
 
 ### Prerequisites

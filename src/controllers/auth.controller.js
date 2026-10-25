@@ -2,6 +2,8 @@ const prisma = require("../lib/prisma");
 const { hashPassword, comparePassword } = require("../utils/hash");
 const { signToken } = require("../utils/jwt");
 const { rolesFor } = require("../utils/roles");
+const { createResetToken, resetPassword: applyPasswordReset } = require("../services/passwordReset.service");
+const { sendPasswordResetEmail } = require("../services/mail.service");
 
 const COOKIE_NAME = "token";
 const COOKIE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes, matches JWT_EXPIRES_IN default
@@ -315,4 +317,71 @@ function logout(req, res) {
   return res.status(200).json({ message: "logged out" });
 }
 
-module.exports = { register, registerProvider, login, logout, clearAuthCookie };
+// US1-5: always answers the same way, so the endpoint can't be used to find
+// out which emails are registered.
+async function forgotPassword(req, res, next) {
+  try {
+    const { email } = req.body;
+    if (typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({ error: "email is required" });
+    }
+
+    const normalizedEmail = normalizeEmail(email);
+    if (!EMAIL_PATTERN.test(normalizedEmail)) {
+      return res.status(400).json({ error: "email must be a valid email address" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, email: true, firstname: true, deletedAt: true },
+    });
+
+    if (user && !user.deletedAt) {
+      const token = await createResetToken(user.id);
+      try {
+        await sendPasswordResetEmail({ to: user.email, firstname: user.firstname, token });
+      } catch (err) {
+        // The caller can't be told: that would reveal the email is registered
+        console.error("password reset email failed", err);
+      }
+    }
+
+    return res.status(200).json({
+      message: "if that email is registered, a reset link has been sent",
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resetPassword(req, res, next) {
+  try {
+    const { token, password } = req.body;
+    if (typeof token !== "string" || !token || typeof password !== "string" || !password) {
+      return res.status(400).json({ error: "token and password are required" });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ error: "password must be at least 8 characters" });
+    }
+
+    const changed = await applyPasswordReset(token, password);
+    if (!changed) {
+      return res.status(400).json({ error: "this reset link is invalid or has expired" });
+    }
+
+    return res.status(200).json({ message: "password updated" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = {
+  register,
+  registerProvider,
+  login,
+  logout,
+  forgotPassword,
+  resetPassword,
+  clearAuthCookie,
+};

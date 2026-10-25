@@ -33,11 +33,12 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  provider     Provider?
-  customer     Customer?
-  reports      Report[]
-  sentChatLogs ChatLog[] @relation("ChatLogSender")
-  notifications Notification[]
+  provider            Provider?
+  customer            Customer?
+  reports             Report[]
+  sentChatLogs        ChatLog[]            @relation("ChatLogSender")
+  notifications       Notification[]
+  passwordResetTokens PasswordResetToken[]
 
   @@map("users")
 }
@@ -216,4 +217,21 @@ model Notification {
   @@index([userId, createdAt])
   @@index([bookingId])
   @@map("notifications")
+}
+
+// One-time password reset links (US1-5). Only the SHA-256 of the token is
+// stored; the raw token exists only in the emailed link. A token is usable
+// until expiresAt and only while usedAt is null.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique @db.Char(64)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }

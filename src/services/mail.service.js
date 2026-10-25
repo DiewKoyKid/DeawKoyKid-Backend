@@ -55,4 +55,27 @@ function sendAccountDeletedEmail({ to, firstname }) {
   });
 }
 
-module.exports = { sendMail, sendAccountDeletedEmail };
+// US1-5: the reset link points at the frontend, which posts the token back.
+function sendPasswordResetEmail({ to, firstname, token }) {
+  const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || "http://localhost:5173";
+  const link = `${frontendUrl.replace(/\/$/, "")}/reset-password?token=${token}`;
+  return sendMail({
+    to,
+    subject: "Reset your Togethr password",
+    text: [
+      `Hi ${firstname},`,
+      "",
+      "We received a request to reset your Togethr password. Open this link to",
+      "choose a new one. It works once and expires in 15 minutes:",
+      "",
+      link,
+      "",
+      "If you didn't ask for this, you can ignore this email and your password",
+      "will stay the same.",
+      "",
+      "The Togethr team",
+    ].join("\n"),
+  });
+}
+
+module.exports = { sendMail, sendAccountDeletedEmail, sendPasswordResetEmail };
