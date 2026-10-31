@@ -493,4 +493,95 @@ async function searchServices(req, res) {
   }
 }
 
-module.exports = { createService, getServiceById, searchServices };
+// PUT /api/services/:id (US4-3)
+// Replaces the editable fields of the signed-in provider's own service. The
+// body is the same as POST /api/services. Publishing is not changed here.
+//
+// The rate rule needs no extra work: a booking stores its own totalPrice when
+// it is created (booking.controller.js, priceFor), so a new rate only affects
+// bookings made after this call, and confirmed bookings keep their price.
+async function updateService(req, res) {
+  try {
+    const { userId } = req.user; // attached by authenticateToken
+
+    const existing = await prisma.service.findUnique({
+      where: { id: req.params.id },
+      select: { providerId: true, coverPhotoUrl: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: "Service not found." });
+    }
+    if (existing.providerId !== userId) {
+      return res.status(403).json({ error: "You can only edit your own services." });
+    }
+
+    const problem = validateServiceBody(req.body || {});
+    if (problem) {
+      return badRequest(res, problem);
+    }
+
+    const { title, description, location, rate, rateUnit, startTime, endTime, coverPhotoUrl } =
+      req.body;
+    // Categories are replaced only when sent; leaving them out keeps the current ones.
+    const categoryIds =
+      req.body.categoryIds === undefined ? undefined : [...new Set(req.body.categoryIds)];
+
+    if (categoryIds && categoryIds.length > 0) {
+      const known = await prisma.category.count({ where: { id: { in: categoryIds } } });
+      if (known !== categoryIds.length) {
+        return badRequest(res, { field: "categoryIds", message: "categoryIds contains an unknown category" });
+      }
+    }
+
+    const service = await prisma.service.update({
+      where: { id: req.params.id },
+      data: {
+        title: title.trim(),
+        description: description?.trim() || null,
+        location: location.trim(),
+        rate,
+        rateUnit: rateUnit || "hour",
+        startTime,
+        endTime,
+        // Left out: keep the current photo. null or "": remove it.
+        coverPhotoUrl:
+          coverPhotoUrl === undefined ? existing.coverPhotoUrl : isGiven(coverPhotoUrl) ? coverPhotoUrl : null,
+        ...(categoryIds && {
+          serviceCategories: {
+            deleteMany: {},
+            create: categoryIds.map((categoryId) => ({ categoryId })),
+          },
+        }),
+      },
+      select: {
+        id: true,
+        providerId: true,
+        title: true,
+        description: true,
+        location: true,
+        rate: true,
+        rateUnit: true,
+        startTime: true,
+        endTime: true,
+        coverPhotoUrl: true,
+        isPublished: true,
+        serviceCategories: { select: { categoryId: true } },
+      },
+    });
+
+    const { serviceCategories, isPublished, ...updated } = service;
+    return res.status(200).json({
+      service: {
+        ...updated,
+        rate: Number(updated.rate), // Decimal would serialize as a string
+        status: isPublished ? "PUBLISHED" : "UNPUBLISHED",
+        categoryIds: serviceCategories.map((link) => link.categoryId),
+      },
+    });
+  } catch (err) {
+    console.error("updateService error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { createService, getServiceById, searchServices, updateService };
