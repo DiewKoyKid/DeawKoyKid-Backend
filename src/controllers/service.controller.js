@@ -1,5 +1,9 @@
 const prisma = require("../lib/prisma");
-const { SLOT_HOLDING_STATUSES } = require("../utils/bookingStatus");
+const {
+  BookingStatus,
+  BOOKING_RESPONSE_WINDOW_MS,
+  SLOT_HOLDING_STATUSES,
+} = require("../utils/bookingStatus");
 
 // Column limits from the services table in prisma/schema.prisma
 const TITLE_MAX = 150;
@@ -493,4 +497,196 @@ async function searchServices(req, res) {
   }
 }
 
-module.exports = { createService, getServiceById, searchServices };
+// PUT /api/services/:id (US4-3)
+// Replaces the editable fields of the signed-in provider's own service. The
+// body is the same as POST /api/services. Publishing is not changed here.
+//
+// The rate rule needs no extra work: a booking stores its own totalPrice when
+// it is created (booking.controller.js, priceFor), so a new rate only affects
+// bookings made after this call, and confirmed bookings keep their price.
+async function updateService(req, res) {
+  try {
+    const { userId } = req.user; // attached by authenticateToken
+
+    const existing = await prisma.service.findUnique({
+      where: { id: req.params.id },
+      select: { providerId: true, coverPhotoUrl: true },
+    });
+    if (!existing) {
+      return res.status(404).json({ error: "Service not found." });
+    }
+    if (existing.providerId !== userId) {
+      return res.status(403).json({ error: "You can only edit your own services." });
+    }
+
+    const problem = validateServiceBody(req.body || {});
+    if (problem) {
+      return badRequest(res, problem);
+    }
+
+    const { title, description, location, rate, rateUnit, startTime, endTime, coverPhotoUrl } =
+      req.body;
+    // Categories are replaced only when sent; leaving them out keeps the current ones.
+    const categoryIds =
+      req.body.categoryIds === undefined ? undefined : [...new Set(req.body.categoryIds)];
+
+    if (categoryIds && categoryIds.length > 0) {
+      const known = await prisma.category.count({ where: { id: { in: categoryIds } } });
+      if (known !== categoryIds.length) {
+        return badRequest(res, { field: "categoryIds", message: "categoryIds contains an unknown category" });
+      }
+    }
+
+    const service = await prisma.service.update({
+      where: { id: req.params.id },
+      data: {
+        title: title.trim(),
+        description: description?.trim() || null,
+        location: location.trim(),
+        rate,
+        rateUnit: rateUnit || "hour",
+        startTime,
+        endTime,
+        // Left out: keep the current photo. null or "": remove it.
+        coverPhotoUrl:
+          coverPhotoUrl === undefined ? existing.coverPhotoUrl : isGiven(coverPhotoUrl) ? coverPhotoUrl : null,
+        ...(categoryIds && {
+          serviceCategories: {
+            deleteMany: {},
+            create: categoryIds.map((categoryId) => ({ categoryId })),
+          },
+        }),
+      },
+      select: {
+        id: true,
+        providerId: true,
+        title: true,
+        description: true,
+        location: true,
+        rate: true,
+        rateUnit: true,
+        startTime: true,
+        endTime: true,
+        coverPhotoUrl: true,
+        isPublished: true,
+        serviceCategories: { select: { categoryId: true } },
+      },
+    });
+
+    const { serviceCategories, isPublished, ...updated } = service;
+    return res.status(200).json({
+      service: {
+        ...updated,
+        rate: Number(updated.rate), // Decimal would serialize as a string
+        status: isPublished ? "PUBLISHED" : "UNPUBLISHED",
+        categoryIds: serviceCategories.map((link) => link.categoryId),
+      },
+    });
+  } catch (err) {
+    console.error("updateService error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+const SERVICE_STATUSES = ["PUBLISHED", "UNPUBLISHED"];
+const PENDING_REQUESTS_MESSAGE = "Please respond to pending requests first";
+
+// Thrown inside the unpublish transaction to roll it back and answer 409
+class PendingRequestsError extends Error {
+  constructor(pendingRequests) {
+    super(PENDING_REQUESTS_MESSAGE);
+    this.pendingRequests = pendingRequests;
+  }
+}
+
+// Requests the provider still has to answer. One older than the 24-hour
+// response window counts as expired even before the expiry job marks it.
+function pendingRequestsWhere(serviceId, now = Date.now()) {
+  return {
+    serviceId,
+    bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION,
+    createdAt: { gt: new Date(now - BOOKING_RESPONSE_WINDOW_MS) },
+  };
+}
+
+// PATCH /api/services/:id/status { status: "PUBLISHED" | "UNPUBLISHED" } (US4-3)
+// Unpublishing hides the service from search and stops new requests;
+// confirmed bookings are not touched. It is refused with 409 while a booking
+// request is still waiting for the provider's answer.
+async function setServiceStatus(req, res) {
+  try {
+    const { userId } = req.user; // attached by authenticateToken
+    const { status } = req.body || {};
+
+    if (!SERVICE_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'status must be "PUBLISHED" or "UNPUBLISHED"' });
+    }
+
+    const service = await prisma.service.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, providerId: true },
+    });
+    if (!service) {
+      return res.status(404).json({ error: "Service not found." });
+    }
+    if (service.providerId !== userId) {
+      return res.status(403).json({ error: "You can only change your own services." });
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Same row lock createBooking takes, so a request can't slip in
+        // between the check below and the update.
+        await tx.$queryRaw`SELECT 1 FROM "services" WHERE "id" = ${service.id} FOR UPDATE`;
+
+        if (status === "UNPUBLISHED") {
+          const pending = await tx.booking.findMany({
+            where: pendingRequestsWhere(service.id),
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              appointmentDate: true,
+              startTime: true,
+              endTime: true,
+              customer: { select: { user: { select: { firstname: true, lastname: true } } } },
+            },
+          });
+          if (pending.length > 0) throw new PendingRequestsError(pending);
+        }
+
+        await tx.service.update({
+          where: { id: service.id },
+          data: { isPublished: status === "PUBLISHED" },
+        });
+      });
+    } catch (err) {
+      if (err instanceof PendingRequestsError) {
+        return res.status(409).json({
+          error: PENDING_REQUESTS_MESSAGE,
+          pendingRequests: err.pendingRequests.map(({ customer, appointmentDate, ...booking }) => {
+            const { firstname, lastname } = customer.user;
+            return {
+              ...booking,
+              appointmentDate: appointmentDate.toISOString().slice(0, 10),
+              customerName: `${firstname} ${lastname ? `${lastname[0]}.` : ""}`.trim(),
+            };
+          }),
+        });
+      }
+      throw err;
+    }
+
+    return res.status(200).json({ service: { id: service.id, status } });
+  } catch (err) {
+    console.error("setServiceStatus error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = {
+  createService,
+  getServiceById,
+  searchServices,
+  updateService,
+  setServiceStatus,
+};

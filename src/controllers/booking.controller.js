@@ -145,6 +145,8 @@ async function createBooking(req, res) {
             endTime,
             bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION,
             duration: duration ?? null,
+            // The price at booking time, so a later rate change doesn't affect it (US4-3)
+            totalPrice: priceFor(service, startTime, endTime),
           },
           select: {
             id: true,
