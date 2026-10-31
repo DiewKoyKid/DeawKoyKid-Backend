@@ -183,8 +183,13 @@ async function getMyService(req, res) {
     }
 
     const [pendingRequestCount, confirmedBookingCount] = await Promise.all([
+      // Same rule the unpublish check uses, so the two numbers agree
       prisma.booking.count({
-        where: { serviceId: service.id, bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION },
+        where: {
+          serviceId: service.id,
+          bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION,
+          createdAt: { gt: new Date(Date.now() - RESPONSE_WINDOW_MS) },
+        },
       }),
       prisma.booking.count({
         where: { serviceId: service.id, bookingStatus: BookingStatus.CONFIRMED },

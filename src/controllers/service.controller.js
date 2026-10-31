@@ -1,5 +1,9 @@
 const prisma = require("../lib/prisma");
-const { SLOT_HOLDING_STATUSES } = require("../utils/bookingStatus");
+const {
+  BookingStatus,
+  BOOKING_RESPONSE_WINDOW_MS,
+  SLOT_HOLDING_STATUSES,
+} = require("../utils/bookingStatus");
 
 // Column limits from the services table in prisma/schema.prisma
 const TITLE_MAX = 150;
@@ -584,4 +588,105 @@ async function updateService(req, res) {
   }
 }
 
-module.exports = { createService, getServiceById, searchServices, updateService };
+const SERVICE_STATUSES = ["PUBLISHED", "UNPUBLISHED"];
+const PENDING_REQUESTS_MESSAGE = "Please respond to pending requests first";
+
+// Thrown inside the unpublish transaction to roll it back and answer 409
+class PendingRequestsError extends Error {
+  constructor(pendingRequests) {
+    super(PENDING_REQUESTS_MESSAGE);
+    this.pendingRequests = pendingRequests;
+  }
+}
+
+// Requests the provider still has to answer. One older than the 24-hour
+// response window counts as expired even before the expiry job marks it.
+function pendingRequestsWhere(serviceId, now = Date.now()) {
+  return {
+    serviceId,
+    bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION,
+    createdAt: { gt: new Date(now - BOOKING_RESPONSE_WINDOW_MS) },
+  };
+}
+
+// PATCH /api/services/:id/status { status: "PUBLISHED" | "UNPUBLISHED" } (US4-3)
+// Unpublishing hides the service from search and stops new requests;
+// confirmed bookings are not touched. It is refused with 409 while a booking
+// request is still waiting for the provider's answer.
+async function setServiceStatus(req, res) {
+  try {
+    const { userId } = req.user; // attached by authenticateToken
+    const { status } = req.body || {};
+
+    if (!SERVICE_STATUSES.includes(status)) {
+      return res.status(400).json({ error: 'status must be "PUBLISHED" or "UNPUBLISHED"' });
+    }
+
+    const service = await prisma.service.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, providerId: true },
+    });
+    if (!service) {
+      return res.status(404).json({ error: "Service not found." });
+    }
+    if (service.providerId !== userId) {
+      return res.status(403).json({ error: "You can only change your own services." });
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Same row lock createBooking takes, so a request can't slip in
+        // between the check below and the update.
+        await tx.$queryRaw`SELECT 1 FROM "services" WHERE "id" = ${service.id} FOR UPDATE`;
+
+        if (status === "UNPUBLISHED") {
+          const pending = await tx.booking.findMany({
+            where: pendingRequestsWhere(service.id),
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              appointmentDate: true,
+              startTime: true,
+              endTime: true,
+              customer: { select: { user: { select: { firstname: true, lastname: true } } } },
+            },
+          });
+          if (pending.length > 0) throw new PendingRequestsError(pending);
+        }
+
+        await tx.service.update({
+          where: { id: service.id },
+          data: { isPublished: status === "PUBLISHED" },
+        });
+      });
+    } catch (err) {
+      if (err instanceof PendingRequestsError) {
+        return res.status(409).json({
+          error: PENDING_REQUESTS_MESSAGE,
+          pendingRequests: err.pendingRequests.map(({ customer, appointmentDate, ...booking }) => {
+            const { firstname, lastname } = customer.user;
+            return {
+              ...booking,
+              appointmentDate: appointmentDate.toISOString().slice(0, 10),
+              customerName: `${firstname} ${lastname ? `${lastname[0]}.` : ""}`.trim(),
+            };
+          }),
+        });
+      }
+      throw err;
+    }
+
+    return res.status(200).json({ service: { id: service.id, status } });
+  } catch (err) {
+    console.error("setServiceStatus error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = {
+  createService,
+  getServiceById,
+  searchServices,
+  updateService,
+  setServiceStatus,
+};
