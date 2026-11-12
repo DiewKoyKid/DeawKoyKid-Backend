@@ -14,6 +14,22 @@ Backend RESTful API service สำหรับระบบค้นหาแล�
 * **Privacy & Consent:** การบันทึกและจัดการการยินยอมนโยบายความเป็นส่วนตัวและเงื่อนไขการใช้งาน
 * **Profile Management:** API สำหรับเรียกดูและอัปเดตข้อมูลโปรไฟล์ผู้ใช้งาน
 
+## Complaint storage
+
+`Complaint` links a booking and submitting user to a category, subject (100
+characters), description (2,000 characters), and status (`PENDING` by default).
+`ComplaintAttachment` supports multiple files per complaint, storing the original
+filename, unique durable storage key, MIME type, positive byte size, and upload
+timestamp. File contents are stored separately from the database.
+
+Apply the migration with `npx prisma migrate deploy --config prisma7.config.ts`
+and regenerate the client with `npx prisma generate --config prisma7.config.ts`.
+This schema does not add complaint or upload endpoints. Those endpoints must
+enforce booking ownership, file type/size/count limits, and private file access.
+Deleting a complaint cascades to its attachment rows; storage cleanup must also
+remove the actual files. User and booking deletion is restricted while complaints
+reference them.
+
 ## Booking status API
 
 `PATCH /api/bookings/:id/status` requires authentication (the login cookie or a
