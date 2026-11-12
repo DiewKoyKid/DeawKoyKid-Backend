@@ -14,6 +14,88 @@ Backend RESTful API service สำหรับระบบค้นหาแล�
 * **Privacy & Consent:** การบันทึกและจัดการการยินยอมนโยบายความเป็นส่วนตัวและเงื่อนไขการใช้งาน
 * **Profile Management:** API สำหรับเรียกดูและอัปเดตข้อมูลโปรไฟล์ผู้ใช้งาน
 
+## Complaint storage
+
+`Complaint` links a booking and submitting user to a category, subject (100
+characters), description (2,000 characters), and status (`PENDING` by default).
+`ComplaintAttachment` supports multiple files per complaint, storing the original
+filename, unique durable storage key, MIME type, positive byte size, and upload
+timestamp. File contents are stored separately from the database.
+
+Apply the migration with `npx prisma migrate deploy --config prisma7.config.ts`
+and regenerate the client with `npx prisma generate --config prisma7.config.ts`.
+Deleting a complaint cascades to its attachment rows; storage cleanup must also
+remove the actual files. User and booking deletion is restricted while complaints
+reference them.
+
+## Create complaint API
+
+Customers can list their complaints at `GET /api/complaints/me`, open one at
+`GET /api/complaints/:id`, and download its attachments while signed in.
+The web app provides **My complaints** and **View reported issues** in My bookings.
+
+To appoint a complaint admin, apply migrations, run
+`npx prisma studio --config prisma7.config.ts`, and set `User.isAdmin` to
+`true` on the intended active account. Use an individually assigned account
+and verify its user ID before granting access. Set the field back to `false`
+to revoke access. The backend checks the current database value on each
+complaint admin request. All accounts default to false, including accounts
+previously configured through `COMPLAINT_ADMIN_USER_IDS`.
+
+Admins sign in on the regular login page with their own username or email and
+password. The login response includes the `ADMIN` role and the frontend opens
+`/admin/complaints`, where admins can reply and move complaints from Pending
+review to In progress and then Resolved. Existing signed-in accounts can sign
+in again to refresh the roles stored in the frontend.
+
+`POST /api/complaints` requires the login cookie or a Bearer token and
+`multipart/form-data`. Required text fields are `bookingId`, `category`, `subject`
+(1–100 characters), and `description` (1–2,000 characters). Text is trimmed.
+Categories: `PAYMENT`, `CANCELLATION_OR_REFUND`, `PROVIDER_NO_SHOW`,
+`SERVICE_NOT_AS_DESCRIBED`, `OTHER`. Unknown and repeated fields are rejected.
+The server sets `userId` from authentication and `status` to `PENDING`.
+
+Only the booking's customer may submit. All booking statuses are eligible and
+multiple complaints per booking are allowed. Attachments are optional: use the
+repeated `attachments` field for up to 5 JPG/JPEG, PNG, or PDF files, each nonempty
+and at most 10 MiB (10,485,760 bytes). Extensions, MIME types, and file signatures
+must match. Signature validation is not a full document parser or malware scan.
+
+Files are stored outside public uploads in `storage/complaints/` by default.
+`COMPLAINT_STORAGE_DIR` can point to a private persistent disk directory; do not
+place it beneath a publicly served directory. File and database backups must be
+kept together. This endpoint returns metadata, not a public URL or storage key;
+authenticated file retrieval is not implemented yet.
+
+Example (replace the token, booking ID and local file path):
+
+```sh
+curl -X POST http://localhost:8080/api/complaints \
+  -H "Authorization: Bearer <token>" \
+  -F "bookingId=<booking-id>" \
+  -F "category=OTHER" \
+  -F "subject=Booking issue" \
+  -F "description=Please help with this booking" \
+  -F "attachments=@evidence.png;type=image/png"
+```
+
+Success: `201` with `{ "complaint": { "id", "bookingId", "category", "subject",
+"description", "status", "createdAt", "updatedAt", "attachments": [ { "id",
+"originalName", "mimeType", "sizeBytes" } ] }`.
+Errors use `{ "error": "..." }`: `400` invalid fields/files/count or malformed
+multipart, `401` missing/invalid login or unavailable account, `403` another
+customer's booking, `404` missing booking, `413` oversized file, `415` wrong
+request content type, `500` storage/database failure.
+
+Complaint and attachment rows are created atomically. Failed requests clean up
+temporary or moved files; cleanup failures are logged. Filesystem operations are
+not transactional with PostgreSQL, so process crashes can still leave orphaned
+files. A successful POST retry creates another complaint (no idempotency key).
+
+Run endpoint tests with `npm test -- --runTestsByPath tests/complaint.test.js`.
+They use real authentication, multipart parsing and isolated disk storage, with
+Prisma mocked so they do not modify an application database.
+
 ## Booking status API
 
 `PATCH /api/bookings/:id/status` requires authentication (the login cookie or a

@@ -12,6 +12,7 @@ datasource db {
 }
 
 model User {
+  isAdmin Boolean @default(false)
   id              String    @id @default(uuid())
   username        String    @unique @db.VarChar(50)
   email           String?   @unique @db.VarChar(254)
@@ -36,6 +37,7 @@ model User {
   provider            Provider?
   customer            Customer?
   reports             Report[]
+  complaints          Complaint[]
   sentChatLogs        ChatLog[]            @relation("ChatLogSender")
   notifications       Notification[]
   passwordResetTokens PasswordResetToken[]
@@ -153,6 +155,8 @@ model Booking {
   chatLogs      ChatLog[]
   notifications Notification[]
 
+  complaints Complaint[]
+
   @@index([serviceId, appointmentDate])
   @@index([customerId])
   @@index([bookingStatus, createdAt])
@@ -173,6 +177,60 @@ model Review {
   customer Customer @relation(fields: [customerId], references: [userId])
 
   @@map("reviews")
+}
+
+enum ComplaintCategory {
+  PAYMENT
+  CANCELLATION_OR_REFUND
+  PROVIDER_NO_SHOW
+  SERVICE_NOT_AS_DESCRIBED
+  OTHER
+}
+
+enum ComplaintStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Complaint {
+  id          String            @id @default(uuid())
+  bookingId   String
+  userId      String
+  category    ComplaintCategory
+  subject     String            @db.VarChar(100)
+  description String            @db.VarChar(2000)
+  status      ComplaintStatus   @default(PENDING)
+  adminReply  String?           @db.VarChar(2000)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  booking     Booking               @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  attachments ComplaintAttachment[]
+
+  @@index([bookingId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("complaints")
+}
+
+// Store a durable storage key, not an expiring download URL. File access and
+// booking ownership must be checked by the API. sizeBytes is positive (SQL CHECK).
+model ComplaintAttachment {
+  id           String   @id @default(uuid())
+  complaintId  String
+  originalName String   @db.VarChar(255)
+  storageKey   String   @unique
+  mimeType     String   @db.VarChar(100)
+  sizeBytes    Int
+  createdAt    DateTime @default(now())
+
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+
+  @@index([complaintId])
+  @@map("complaint_attachments")
 }
 
 model Report {

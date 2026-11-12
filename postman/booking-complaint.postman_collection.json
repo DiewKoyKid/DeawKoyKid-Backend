@@ -1,0 +1,1104 @@
+{
+  "info": {
+    "name": "Togethr — Booking and Complaint E2E",
+    "description": "Run the E2E folder in order against a running backend with migrations applied to a test database. Creates fresh accounts and records every run. Then send individual requests in Manual attachment checks after choosing local files.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "testPassword",
+      "value": "PostmanTest-Only-9042"
+    }
+  ],
+  "item": [
+    {
+      "name": "E2E — accounts, services, bookings and complaints",
+      "item": [
+        {
+          "name": "Register provider",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/register/provider",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"provider_{{runId}}\",\n  \"email\": \"provider_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"firstname\": \"provider\",\n  \"lastname\": \"Postman\",\n  \"consent\": true,\n  \"idCard\": \"0000000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const vars = pm.collectionVariables;",
+                  "vars.unset(\"coverPhotoUrl\");",
+                  "for (const key of [\"providerToken\", \"customerToken\", \"providerId\", \"customerId\", \"hourServiceId\", \"dayServiceId\", \"secondServiceId\", \"slotId\", \"hourBookingId\", \"dayBookingId\", \"complaintId\", \"attachedComplaintId\"]) vars.unset(key);",
+                  "vars.set(\"runId\", Date.now().toString(36) + Math.random().toString(36).slice(2, 8));",
+                  "vars.set(\"bookingDate\", new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Save account ID\", function () {",
+                  "  const result = pm.response.json();",
+                  "  const value = result.user.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"providerId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login provider",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"provider_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Capture login token\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.user.id).to.eql(pm.collectionVariables.get(\"providerId\"));",
+                  "  const cookie = pm.response.headers.all().filter(h => h.key.toLowerCase() === \"set-cookie\").map(h => /^token=([^;]+)/.exec(h.value)).find(Boolean);",
+                  "  pm.expect(cookie, \"token cookie\").to.exist;",
+                  "  pm.collectionVariables.set(\"providerToken\", cookie[1]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload walking tour cover photo",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "public/uploads/services-cover-photo/service001.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Cover photo uploaded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const url = pm.response.json().url;",
+                  "  pm.expect(url).to.match(/^\\/uploads\\//);",
+                  "  pm.collectionVariables.set(\"coverPhotoUrl\", url);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publish Old Town walking tour",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Old Town walking tour {{runId}}\",\n  \"description\": \"Walk through Bangkok's Old Town with a local guide. Meet at Sanam Chai MRT Exit 1 for a two-hour route past Pak Khlong Talat flower market and the riverside. Bring water and comfortable shoes. Admission fees and food are paid separately.\",\n  \"location\": \"Bangkok\",\n  \"rate\": 450,\n  \"rateUnit\": \"hour\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"13:00\",\n  \"coverPhotoUrl\": \"{{coverPhotoUrl}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Service belongs to provider and has expected rate\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.service.providerId).to.eql(pm.collectionVariables.get(\"providerId\"));",
+                  "  pm.expect(result.service.rate).to.eql(450);",
+                  "  pm.expect(result.service.description).to.eql(JSON.parse(pm.variables.replaceIn(pm.request.body.raw)).description);",
+                  "  pm.expect(result.service.coverPhotoUrl).to.eql(pm.collectionVariables.get(\"coverPhotoUrl\"));",
+                  "  pm.expect(result.service.rateUnit).to.eql(\"hour\");",
+                  "  const value = result.service.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"hourServiceId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publish Full-day photo walk",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Full-day photo walk {{runId}}\",\n  \"description\": \"Postman test service\",\n  \"location\": \"Chiang Mai\",\n  \"rate\": 1600,\n  \"rateUnit\": \"day\",\n  \"startTime\": \"08:00\",\n  \"endTime\": \"17:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Service belongs to provider and has expected rate\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.service.providerId).to.eql(pm.collectionVariables.get(\"providerId\"));",
+                  "  pm.expect(result.service.rate).to.eql(1600);",
+                  "  pm.expect(result.service.rateUnit).to.eql(\"day\");",
+                  "  const value = result.service.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"dayServiceId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publish Evening food tour",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Evening food tour {{runId}}\",\n  \"description\": \"Postman test service\",\n  \"location\": \"Bangkok\",\n  \"rate\": 650,\n  \"rateUnit\": \"hour\",\n  \"startTime\": \"17:00\",\n  \"endTime\": \"21:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Service belongs to provider and has expected rate\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.service.providerId).to.eql(pm.collectionVariables.get(\"providerId\"));",
+                  "  pm.expect(result.service.rate).to.eql(650);",
+                  "  pm.expect(result.service.rateUnit).to.eql(\"hour\");",
+                  "  const value = result.service.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"secondServiceId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Open two walking tour slots",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/services/{{hourServiceId}}/availability",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"slots\": [\n    {\n      \"date\": \"{{bookingDate}}\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"11:00\"\n    },\n    {\n      \"date\": \"{{bookingDate}}\",\n      \"startTime\": \"11:00\",\n      \"endTime\": \"13:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Save available slot\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.slots).to.have.lengthOf(2);",
+                  "  const value = result.slots.find(slot => slot.startTime === \"09:00\")?.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"slotId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register customer",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"customer_{{runId}}\",\n  \"email\": \"customer_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\",\n  \"firstname\": \"customer\",\n  \"lastname\": \"Postman\",\n  \"consent\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Save account ID\", function () {",
+                  "  const result = pm.response.json();",
+                  "  const value = result.user.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"customerId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login customer",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer_{{runId}}@example.com\",\n  \"password\": \"{{testPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Capture login token\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.user.id).to.eql(pm.collectionVariables.get(\"customerId\"));",
+                  "  const cookie = pm.response.headers.all().filter(h => h.key.toLowerCase() === \"set-cookie\").map(h => /^token=([^;]+)/.exec(h.value)).find(Boolean);",
+                  "  pm.expect(cookie, \"token cookie\").to.exist;",
+                  "  pm.collectionVariables.set(\"customerToken\", cookie[1]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Book walking tour by slot",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{hourServiceId}}\",\n  \"slotId\": \"{{slotId}}\",\n  \"duration\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Booking belongs to customer and awaits confirmation\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.booking.customerId).to.eql(pm.collectionVariables.get(\"customerId\"));",
+                  "  pm.expect(result.booking.serviceId).to.eql(pm.collectionVariables.get(\"hourServiceId\"));",
+                  "  pm.expect(result.booking.bookingStatus).to.eql(\"WAITING_FOR_CONFIRMATION\");",
+                  "  const value = result.booking.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"hourBookingId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Book full-day service by date",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"serviceId\": \"{{dayServiceId}}\",\n  \"appointmentDate\": \"{{bookingDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Booking belongs to customer and awaits confirmation\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.booking.customerId).to.eql(pm.collectionVariables.get(\"customerId\"));",
+                  "  pm.expect(result.booking.serviceId).to.eql(pm.collectionVariables.get(\"dayServiceId\"));",
+                  "  pm.expect(result.booking.bookingStatus).to.eql(\"WAITING_FOR_CONFIRMATION\");",
+                  "  const value = result.booking.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"dayBookingId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Provider confirms walking tour",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings/{{hourBookingId}}/status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Booking is confirmed\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.booking.id).to.eql(pm.collectionVariables.get(\"hourBookingId\"));",
+                  "  pm.expect(result.booking.bookingStatus).to.eql(\"CONFIRMED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer sees both bookings",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/bookings/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "if (pm.response.code !== 200) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Both new bookings are visible\", function () {",
+                  "  const result = pm.response.json();",
+                  "  const ids = result.upcoming.concat(result.past).map(b => b.id);",
+                  "  pm.expect(ids).to.include.members([\"hourBookingId\", \"dayBookingId\"].map(k => pm.collectionVariables.get(k)));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer submits complaint",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/complaints",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "OTHER",
+                  "type": "text"
+                },
+                {
+                  "key": "subject",
+                  "value": "Postman booking complaint",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Complaint is pending and linked to booking\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.complaint.bookingId).to.eql(pm.collectionVariables.get(\"hourBookingId\"));",
+                  "  pm.expect(result.complaint.status).to.eql(\"PENDING\");",
+                  "  pm.expect(result.complaint.attachments).to.eql([]);",
+                  "  const value = result.complaint.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"complaintId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject missing subject",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/complaints",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "OTHER",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "if (pm.response.code !== 400) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Error response has a message\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject unsupported category",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/complaints",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "INVALID",
+                  "type": "text"
+                },
+                {
+                  "key": "subject",
+                  "value": "Postman booking complaint",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "if (pm.response.code !== 400) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Error response has a message\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject complaint from provider for customer's booking",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/complaints",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "OTHER",
+                  "type": "text"
+                },
+                {
+                  "key": "subject",
+                  "value": "Postman booking complaint",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", function () {",
+                  "  pm.response.to.have.status(403);",
+                  "});",
+                  "if (pm.response.code !== 403) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Error response has a message\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject unauthenticated complaint",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/complaints",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "OTHER",
+                  "type": "text"
+                },
+                {
+                  "key": "subject",
+                  "value": "Postman booking complaint",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", function () {",
+                  "  pm.response.to.have.status(401);",
+                  "});",
+                  "if (pm.response.code !== 401) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Error response has a message\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Manual attachment checks",
+      "item": [
+        {
+          "name": "Accept PNG attachment",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/complaints",
+            "description": "Select a valid PNG up to 10 MiB.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "OTHER",
+                  "type": "text"
+                },
+                {
+                  "key": "subject",
+                  "value": "Postman booking complaint",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                },
+                {
+                  "key": "attachments",
+                  "type": "file",
+                  "src": null
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Attachment metadata is returned\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.complaint.attachments).to.have.lengthOf(1);",
+                  "  pm.expect(result.complaint.attachments[0].mimeType).to.eql(\"image/png\");",
+                  "  pm.expect(result.complaint.attachments[0].sizeBytes).to.be.above(0).and.at.most(10485760);",
+                  "  pm.expect(result.complaint.attachments[0]).not.to.have.property(\"storageKey\");",
+                  "  const value = result.complaint.id;",
+                  "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
+                  "  pm.collectionVariables.set(\"attachedComplaintId\", value);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject unsupported file",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/complaints",
+            "description": "Select a .txt file.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "OTHER",
+                  "type": "text"
+                },
+                {
+                  "key": "subject",
+                  "value": "Postman booking complaint",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                },
+                {
+                  "key": "attachments",
+                  "type": "file",
+                  "src": null
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "  pm.response.to.have.status(400);",
+                  "});",
+                  "if (pm.response.code !== 400) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Error response has a message\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject oversized attachment",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{customerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/complaints",
+            "description": "Select a valid PNG larger than 10 MiB.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bookingId",
+                  "value": "{{hourBookingId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "OTHER",
+                  "type": "text"
+                },
+                {
+                  "key": "subject",
+                  "value": "Postman booking complaint",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Customer reports a problem with the booking.",
+                  "type": "text"
+                },
+                {
+                  "key": "attachments",
+                  "type": "file",
+                  "src": null
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 413\", function () {",
+                  "  pm.response.to.have.status(413);",
+                  "});",
+                  "if (pm.response.code !== 413) pm.execution.setNextRequest(null);",
+                  "pm.test(\"Error response has a message\", function () {",
+                  "  const result = pm.response.json();",
+                  "  pm.expect(result.error).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
