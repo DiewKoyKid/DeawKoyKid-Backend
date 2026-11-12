@@ -30,6 +30,24 @@ reference them.
 
 ## Create complaint API
 
+Customers can list their complaints at `GET /api/complaints/me`, open one at
+`GET /api/complaints/:id`, and download its attachments while signed in.
+The web app provides **My complaints** and **View reported issues** in My bookings.
+
+To appoint a complaint admin, apply migrations, run
+`npx prisma studio --config prisma7.config.ts`, and set `User.isAdmin` to
+`true` on the intended active account. Use an individually assigned account
+and verify its user ID before granting access. Set the field back to `false`
+to revoke access. The backend checks the current database value on each
+complaint admin request. All accounts default to false, including accounts
+previously configured through `COMPLAINT_ADMIN_USER_IDS`.
+
+Admins sign in on the regular login page with their own username or email and
+password. The login response includes the `ADMIN` role and the frontend opens
+`/admin/complaints`, where admins can reply and move complaints from Pending
+review to In progress and then Resolved. Existing signed-in accounts can sign
+in again to refresh the roles stored in the frontend.
+
 `POST /api/complaints` requires the login cookie or a Bearer token and
 `multipart/form-data`. Required text fields are `bookingId`, `category`, `subject`
 (1–100 characters), and `description` (1–2,000 characters). Text is trimmed.

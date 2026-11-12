@@ -64,6 +64,7 @@ const { idCard, bio, languages, emergencyContactName, emergencyContactPhone } = 
         profilePhotoUrl: true,
         customer: { select: { userId: true } },
         provider: { select: { userId: true } },
+        isAdmin: true,
       },
     });
 

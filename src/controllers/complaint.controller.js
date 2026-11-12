@@ -1,15 +1,17 @@
 const { ComplaintCategory } = require("@prisma/client");
 const prisma = require("../lib/prisma");
+const path = require("node:path");
 const {
-  badRequest, validateAttachment, persistAttachments, cleanupAttachments,
+  STORAGE_ROOT, badRequest, validateAttachment, persistAttachments, cleanupAttachments,
 } = require("../utils/complaintAttachments");
 
 // authenticateToken intentionally permits a token whose user no longer exists.
 // Reject that case here before accepting files, without changing other routes.
 async function requireComplaintUser(req, res, next) {
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { deletedAt: true } });
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId }, select: { deletedAt: true, isAdmin: true } });
     if (!user || user.deletedAt) return res.status(401).json({ error: "Account is unavailable" });
+    req.complaintUser = user;
     return next();
   } catch (err) {
     console.error("Complaint user lookup error:", err);
@@ -72,4 +74,103 @@ async function createComplaint(req, res) {
   return res.status(status).json(response);
 }
 
-module.exports = { requireComplaintUser, createComplaint };
+const summary = {
+  id: true, bookingId: true, category: true, subject: true, status: true, createdAt: true,
+  booking: { select: { service: { select: { title: true } } } },
+};
+const details = {
+  ...summary, description: true, adminReply: true, updatedAt: true,
+  attachments: { select: { id: true, originalName: true, mimeType: true, sizeBytes: true } },
+};
+
+function requireComplaintAdmin(req, res, next) {
+  if (!req.complaintUser.isAdmin) {
+    return res.status(403).json({ error: "Complaint admin access required" });
+  }
+  req.complaintAdmin = true;
+  return next();
+}
+
+function complaintScope(req) {
+  return req.complaintAdmin ? {} : { userId: req.user.userId };
+}
+
+async function listComplaints(req, res, next) {
+  try {
+    const complaints = await prisma.complaint.findMany({
+      where: complaintScope(req),
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: summary,
+    });
+    return res.json({ complaints });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function getComplaint(req, res, next) {
+  try {
+    const complaint = await prisma.complaint.findFirst({
+      where: { id: req.params.id, ...complaintScope(req) },
+      select: details,
+    });
+    if (!complaint) return res.status(404).json({ error: "Complaint not found" });
+    return res.json({ complaint });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function downloadAttachment(req, res, next) {
+  try {
+    const file = await prisma.complaintAttachment.findFirst({
+      where: { id: req.params.attachmentId, complaintId: req.params.id, complaint: complaintScope(req) },
+      select: { originalName: true, storageKey: true },
+    });
+    if (!file) return res.status(404).json({ error: "Attachment not found" });
+    const filename = path.resolve(STORAGE_ROOT, file.storageKey);
+    const relative = path.relative(STORAGE_ROOT, filename);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+      return res.status(404).json({ error: "Attachment not found" });
+    }
+    res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+    return res.download(filename, file.originalName, (err) => {
+      if (!err) return;
+      if (!res.headersSent && err.status === 404) return res.status(404).json({ error: "Attachment not found" });
+      return next(err);
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+const transitions = {
+  PENDING: "IN_PROGRESS",
+  IN_PROGRESS: "RESOLVED",
+};
+
+async function updateComplaint(req, res, next) {
+  const { expectedStatus, expectedUpdatedAt, status, adminReply } = req.body || {};
+  const version = typeof expectedUpdatedAt === "string" ? new Date(expectedUpdatedAt) : null;
+  if (!Object.hasOwn(transitions, expectedStatus) ||
+      (status !== expectedStatus && status !== transitions[expectedStatus]) ||
+      !version || Number.isNaN(version.getTime()) ||
+      typeof adminReply !== "string" || [...adminReply.trim()].length > 2000) {
+    return res.status(400).json({ error: "Invalid complaint status or reply" });
+  }
+  try {
+    const result = await prisma.complaint.updateMany({
+      where: { id: req.params.id, status: expectedStatus, updatedAt: version },
+      data: { status, adminReply: adminReply.trim() || null },
+    });
+    if (!result.count) return res.status(409).json({ error: "Complaint changed. Reload before updating." });
+    return getComplaint(req, res, next);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+module.exports = {
+  requireComplaintUser, createComplaint, requireComplaintAdmin, listComplaints,
+  getComplaint, downloadAttachment, updateComplaint,
+};

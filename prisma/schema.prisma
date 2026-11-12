@@ -12,6 +12,7 @@ datasource db {
 }
 
 model User {
+  isAdmin Boolean @default(false)
   id              String    @id @default(uuid())
   username        String    @unique @db.VarChar(50)
   email           String?   @unique @db.VarChar(254)
@@ -201,6 +202,7 @@ model Complaint {
   subject     String            @db.VarChar(100)
   description String            @db.VarChar(2000)
   status      ComplaintStatus   @default(PENDING)
+  adminReply  String?           @db.VarChar(2000)
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
