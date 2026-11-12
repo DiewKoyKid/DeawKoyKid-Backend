@@ -314,6 +314,8 @@ async function getMyBookings(req, res) {
         duration: true,
         totalPrice: true,
         createdAt: true,
+        // One review per booking (unique bookingId), so take: 1 is all of them
+        reviews: { select: { rating: true, comment: true, timestamp: true }, take: 1 },
         service: {
           select: {
             id: true,
@@ -333,8 +335,10 @@ async function getMyBookings(req, res) {
       const startsAt = bookingStartsAt(booking);
       const started = startsAt.getTime() <= now;
       const { provider, ...service } = booking.service;
+      const { reviews, ...rest } = booking;
+      const review = reviews[0];
       const item = {
-        ...booking,
+        ...rest,
         bookingDate: toDateString(booking.bookingDate),
         appointmentDate: toDateString(booking.appointmentDate),
         totalPrice: booking.totalPrice === null ? null : Number(booking.totalPrice),
@@ -342,6 +346,8 @@ async function getMyBookings(req, res) {
         startsAt: startsAt.toISOString(),
         // Same rule PATCH /api/bookings/:id/cancel enforces
         canCancel: booking.bookingStatus === BookingStatus.CONFIRMED && !started,
+        // The customer's review of this booking (US8-1), null until written
+        review: review ? { ...review, timestamp: review.timestamp.toISOString() } : null,
         service,
         provider: { id: provider.userId, ...provider.user },
       };
