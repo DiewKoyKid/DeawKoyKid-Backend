@@ -23,6 +23,12 @@ function readCookie(header, name) {
 
 const roomFor = (bookingId) => `booking:${bookingId}`;
 
+// The running Socket.IO server, so REST routes (photo upload) can broadcast too.
+let ioInstance = null;
+function broadcastMessage(message) {
+  ioInstance?.to(roomFor(message.bookingId)).emit("chat:message", message);
+}
+
 async function authenticateSocket(socket, next) {
   const token =
     socket.handshake.auth?.token || readCookie(socket.handshake.headers.cookie, "token");
@@ -70,7 +76,7 @@ function registerChatHandlers(io, socket) {
       // completed since the user joined.
       await getChatAccess(bookingId, userId, { write: true });
       const message = await createMessage(bookingId, userId, content);
-      io.to(roomFor(bookingId)).emit("chat:message", message);
+      broadcastMessage(message);
       if (typeof ack === "function") ack({ ok: true, message });
     } catch (err) {
       errorAck(ack, err);
@@ -85,9 +91,10 @@ function attachChat(httpServer) {
       credentials: true,
     },
   });
+  ioInstance = io;
   io.use(authenticateSocket);
   io.on("connection", (socket) => registerChatHandlers(io, socket));
   return io;
 }
 
-module.exports = { attachChat, readCookie };
+module.exports = { attachChat, broadcastMessage, readCookie };

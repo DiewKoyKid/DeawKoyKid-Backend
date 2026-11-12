@@ -192,7 +192,9 @@ model ChatLog {
   id        String   @id @default(uuid())
   bookingId String
   senderId  String
+  // Empty for a photo-only message (US7-2)
   content   String
+  imageUrl  String?
   timestamp DateTime @default(now())
 
   booking Booking @relation(fields: [bookingId], references: [id])
