@@ -6,6 +6,7 @@ const { comparePassword } = require("../utils/hash");
 const { clearAuthCookie } = require("./auth.controller");
 const { ActiveBookingsError, deleteAccount } = require("../services/accountDeletion.service");
 const { sendAccountDeletedEmail } = require("../services/mail.service");
+const { SERVICE_CARD_SELECT, toServiceCard } = require("../utils/serviceCard");
 const {
   PROFILE_PHOTO_DIR,
   PROFILE_PHOTO_URL_PREFIX,
@@ -237,7 +238,7 @@ async function getPublicProfile(req, res, next) {
     const { id } = req.params;
 
     // Explicit whitelist select — only fields safe to expose publicly.
-    // password, bankAccount, phoneNumber (User) and idCard,
+    // password, email, gender, bankAccount, phoneNumber (User) and idCard,
     // emergencyContactName, emergencyContactPhone, status (Provider)
     // are intentionally never selected here, not just filtered out
     // afterward, so a future field added to the schema can't leak
@@ -247,10 +248,8 @@ async function getPublicProfile(req, res, next) {
       select: {
         id: true,
         username: true,
-        email: true,
         firstname: true,
         lastname: true,
-        gender: true,
         instagram: true,
         line: true,
         facebook: true,
@@ -272,7 +271,49 @@ async function getPublicProfile(req, res, next) {
       return res.status(404).json({ error: "user not found" });
     }
 
-    return res.status(200).json({ user });
+    // A customer's profile has no reviews or services.
+    if (!user.provider) {
+      return res.status(200).json({ user });
+    }
+
+    // A provider's profile also shows the reviews on all their services and
+    // their published services (US3-3). Both selects are whitelists too.
+    const [reviews, services] = await Promise.all([
+      prisma.review.findMany({
+        where: { booking: { service: { providerId: id } } },
+        orderBy: { timestamp: "desc" },
+        select: {
+          id: true,
+          rating: true,
+          comment: true,
+          timestamp: true,
+          customer: { select: { user: { select: { firstname: true } } } },
+          booking: { select: { service: { select: { title: true } } } },
+        },
+      }),
+      prisma.service.findMany({
+        where: { providerId: id, isPublished: true }, // never drafts
+        orderBy: { title: "asc" },
+        select: SERVICE_CARD_SELECT,
+      }),
+    ]);
+
+    return res.status(200).json({
+      user: {
+        ...user,
+        // Same shape as the reviews in GET /api/services/:id, plus the service title
+        reviews: reviews.map((review) => ({
+          id: review.id,
+          author: review.customer.user.firstname,
+          rating: review.rating,
+          comment: review.comment,
+          date: review.timestamp,
+          serviceTitle: review.booking.service.title,
+        })),
+        // Same shape as GET /api/services/search
+        services: services.map(toServiceCard),
+      },
+    });
   } catch (err) {
     next(err);
   }
