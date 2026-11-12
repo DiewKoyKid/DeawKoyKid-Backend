@@ -44,6 +44,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const vars = pm.collectionVariables;",
+                  "vars.unset(\"coverPhotoUrl\");",
                   "for (const key of [\"providerToken\", \"customerToken\", \"providerId\", \"customerId\", \"hourServiceId\", \"dayServiceId\", \"secondServiceId\", \"slotId\", \"hourBookingId\", \"dayBookingId\", \"complaintId\", \"attachedComplaintId\"]) vars.unset(key);",
                   "vars.set(\"runId\", Date.now().toString(36) + Math.random().toString(36).slice(2, 8));",
                   "vars.set(\"bookingDate\", new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));"
@@ -112,6 +113,48 @@
           ]
         },
         {
+          "name": "Upload walking tour cover photo",
+          "protocolProfileBehavior": {
+            "disableCookies": true
+          },
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "token={{providerToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "public/uploads/services-cover-photo/service001.jpg"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Cover photo uploaded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const url = pm.response.json().url;",
+                  "  pm.expect(url).to.match(/^\\/uploads\\//);",
+                  "  pm.collectionVariables.set(\"coverPhotoUrl\", url);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Publish Old Town walking tour",
           "protocolProfileBehavior": {
             "disableCookies": true
@@ -127,7 +170,7 @@
             "url": "{{baseUrl}}/api/services",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Old Town walking tour {{runId}}\",\n  \"description\": \"Postman test service\",\n  \"location\": \"Bangkok\",\n  \"rate\": 450,\n  \"rateUnit\": \"hour\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"13:00\"\n}",
+              "raw": "{\n  \"title\": \"Old Town walking tour {{runId}}\",\n  \"description\": \"Walk through Bangkok's Old Town with a local guide. Meet at Sanam Chai MRT Exit 1 for a two-hour route past Pak Khlong Talat flower market and the riverside. Bring water and comfortable shoes. Admission fees and food are paid separately.\",\n  \"location\": \"Bangkok\",\n  \"rate\": 450,\n  \"rateUnit\": \"hour\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"13:00\",\n  \"coverPhotoUrl\": \"{{coverPhotoUrl}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -149,6 +192,8 @@
                   "  const result = pm.response.json();",
                   "  pm.expect(result.service.providerId).to.eql(pm.collectionVariables.get(\"providerId\"));",
                   "  pm.expect(result.service.rate).to.eql(450);",
+                  "  pm.expect(result.service.description).to.eql(JSON.parse(pm.variables.replaceIn(pm.request.body.raw)).description);",
+                  "  pm.expect(result.service.coverPhotoUrl).to.eql(pm.collectionVariables.get(\"coverPhotoUrl\"));",
                   "  pm.expect(result.service.rateUnit).to.eql(\"hour\");",
                   "  const value = result.service.id;",
                   "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
@@ -256,7 +301,7 @@
           ]
         },
         {
-          "name": "Open a two-hour slot",
+          "name": "Open two walking tour slots",
           "protocolProfileBehavior": {
             "disableCookies": true
           },
@@ -271,7 +316,7 @@
             "url": "{{baseUrl}}/api/services/{{hourServiceId}}/availability",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"slots\": [\n    {\n      \"date\": \"{{bookingDate}}\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"11:00\"\n    }\n  ]\n}",
+              "raw": "{\n  \"slots\": [\n    {\n      \"date\": \"{{bookingDate}}\",\n      \"startTime\": \"09:00\",\n      \"endTime\": \"11:00\"\n    },\n    {\n      \"date\": \"{{bookingDate}}\",\n      \"startTime\": \"11:00\",\n      \"endTime\": \"13:00\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -291,8 +336,8 @@
                   "if (pm.response.code !== 201) pm.execution.setNextRequest(null);",
                   "pm.test(\"Save available slot\", function () {",
                   "  const result = pm.response.json();",
-                  "  pm.expect(result.slots).to.have.lengthOf(1);",
-                  "  const value = result.slots[0].id;",
+                  "  pm.expect(result.slots).to.have.lengthOf(2);",
+                  "  const value = result.slots.find(slot => slot.startTime === \"09:00\")?.id;",
                   "  pm.expect(value).to.be.a(\"string\").and.not.empty;",
                   "  pm.collectionVariables.set(\"slotId\", value);",
                   "});"
