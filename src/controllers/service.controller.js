@@ -4,6 +4,7 @@ const {
   BOOKING_RESPONSE_WINDOW_MS,
   SLOT_HOLDING_STATUSES,
 } = require("../utils/bookingStatus");
+const { SERVICE_CARD_SELECT, toServiceCard } = require("../utils/serviceCard");
 
 // Column limits from the services table in prisma/schema.prisma
 const TITLE_MAX = 150;
@@ -424,62 +425,13 @@ async function searchServices(req, res) {
         orderBy,
         skip,
         take: limitNum,
-        select: {
-          id: true,
-          title: true,
-          location: true,
-          rate: true,
-          rateUnit: true,
-          coverPhotoUrl: true,
-          provider: {
-            select: {
-              avgRating: true,
-              user: {
-                select: {
-                  firstname: true,
-                  lastname: true,
-                  profilePhotoUrl: true
-                }
-              }
-            }
-          },
-          bookings: {
-            select: {
-              reviews: { select: { id: true, rating: true } }
-            }
-          }
-        }
+        select: SERVICE_CARD_SELECT
       }),
       prisma.service.count({ where })
     ]);
 
     // Format the result
-    const formattedServices = services.map(s => {
-      let reviewCount = 0;
-      let sumRating = 0;
-      s.bookings.forEach(b => {
-        reviewCount += b.reviews.length;
-        b.reviews.forEach(r => sumRating += r.rating);
-      });
-
-      const calculatedAvg = reviewCount > 0 ? sumRating / reviewCount : null;
-
-      return {
-        id: s.id,
-        title: s.title,
-        location: s.location,
-        rate: Number(s.rate),
-        rateUnit: s.rateUnit,
-        coverPhotoUrl: s.coverPhotoUrl,
-        provider: {
-          firstname: s.provider.user.firstname,
-          lastname: s.provider.user.lastname,
-          profilePhotoUrl: s.provider.user.profilePhotoUrl,
-          avgRating: s.provider.avgRating ? Number(s.provider.avgRating) : calculatedAvg
-        },
-        reviewCount
-      };
-    });
+    const formattedServices = services.map(toServiceCard);
 
     return res.status(200).json({
       data: formattedServices,
