@@ -186,16 +186,19 @@ model Report {
   @@map("reports")
 }
 
+// Booking chat messages (US7-1). Only the customer and provider of a confirmed
+// booking can read or send them; see src/services/chat.service.js.
 model ChatLog {
   id        String   @id @default(uuid())
   bookingId String
   senderId  String
   content   String
-  timestamp DateTime
+  timestamp DateTime @default(now())
 
   booking Booking @relation(fields: [bookingId], references: [id])
   sender  User    @relation("ChatLogSender", fields: [senderId], references: [id])
 
+  @@index([bookingId, timestamp])
   @@map("chat_logs")
 }
 
