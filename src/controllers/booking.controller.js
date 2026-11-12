@@ -1,6 +1,6 @@
 const prisma = require("../lib/prisma");
 const { notifyProviderOfNewBooking } = require("../services/notification.service");
-const { changeBookingStatus } = require("../services/booking.service");
+const { changeBookingStatus, bookingTransaction } = require("../services/booking.service");
 const {
   BookingStatus,
   SLOT_HOLDING_STATUSES,
@@ -201,7 +201,7 @@ async function updateBookingStatus(req, res) {
   }
 
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await bookingTransaction(async (tx) => {
       // Hold this lock through authorization, transition validation, and the
       // status-change hook so concurrent decisions cannot overwrite each other.
       await tx.$queryRaw`SELECT 1 FROM "bookings" WHERE "id" = ${req.params.id} FOR UPDATE`;
@@ -218,8 +218,8 @@ async function updateBookingStatus(req, res) {
       if (isUnansweredBookingExpired(current)) {
         // Expiry is a system action: notify both parties, and commit it before
         // returning the conflict response (throwing would roll it back).
-        await changeBookingStatus(req.params.id, BookingStatus.EXPIRED, { client: tx });
-        return { statusCode: 409, error: "This request has expired" };
+        const expired = await changeBookingStatus(req.params.id, BookingStatus.EXPIRED, { client: tx });
+        return { ...expired, statusCode: 409, error: "This request has expired" };
       }
       if (current.bookingStatus === BookingStatus.EXPIRED) {
         return { statusCode: 409, error: "This request has expired" };
@@ -253,7 +253,7 @@ async function updateBookingStatus(req, res) {
 // before its booked time begins. Cancelling releases the slot.
 async function cancelBooking(req, res) {
   try {
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await bookingTransaction(async (tx) => {
       // Lock before checking, so a concurrent decision or cancel can't slip in
       // between the checks and the status change.
       await tx.$queryRaw`SELECT 1 FROM "bookings" WHERE "id" = ${req.params.id} FOR UPDATE`;

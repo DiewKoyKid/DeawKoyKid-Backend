@@ -1,3 +1,5 @@
+const prisma = require("../lib/prisma");
+const { sendBookingNotificationEmail } = require("./mail.service");
 const { BookingStatus } = require("../utils/bookingStatus");
 
 const NEW_BOOKING_REQUEST = "NEW_BOOKING_REQUEST";
@@ -26,7 +28,7 @@ function toDateString(date) {
 
 // Creates the provider's in-app notification for a new booking request. Pass
 // the transaction client so it commits (or rolls back) together with the booking.
-// Email delivery and the user's email setting are Max's F53.
+// New requests remain in-app; status-change emails are sent after commit.
 function notifyProviderOfNewBooking(tx, { booking, providerId, serviceTitle, customerName }) {
   const date = toDateString(booking.appointmentDate);
   return tx.notification.create({
@@ -60,7 +62,26 @@ async function notifyBookingStatusChange(tx, { booking, providerId, serviceTitle
   });
 }
 
+// Called only after the booking transaction commits. A mail failure must not
+// undo the booking or its in-app notification. Uses the existing mail transport.
+async function sendBookingStatusEmails(notifications = []) {
+  await Promise.all(notifications.map(async (notification) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: notification.userId },
+        select: { email: true, emailNotificationsEnabled: true, deletedAt: true },
+      });
+      if (user?.email && user.emailNotificationsEnabled && !user.deletedAt) {
+        await sendBookingNotificationEmail({ to: user.email, notification });
+      }
+    } catch {
+      console.error(`Booking notification email ${notification.id} failed.`);
+    }
+  }));
+}
+
 module.exports = {
+  sendBookingStatusEmails,
   NEW_BOOKING_REQUEST,
   BOOKING_STATUS_NOTIFICATION_TYPES,
   notifyProviderOfNewBooking,
