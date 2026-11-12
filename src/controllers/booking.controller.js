@@ -6,8 +6,12 @@ const {
   SLOT_HOLDING_STATUSES,
   ACTIVE_BOOKING_STATUSES,
   isUnansweredBookingExpired,
+  COMPLETABLE_STATUSES,
   bookingStartsAt,
+  bookingEndsAt,
   hasBookingStarted,
+  hasBookingEnded,
+  canCompleteBooking,
 } = require("../utils/bookingStatus");
 
 // US6-1: one message for both a taken slot and a past date
@@ -297,6 +301,54 @@ async function cancelBooking(req, res) {
   }
 }
 
+// PATCH /api/bookings/:id/complete (US6-5) — the customer confirms the trip is
+// over, once its end time has passed. The booking becomes COMPLETED, which
+// unlocks POST /api/reviews, and the provider gets a notification.
+async function completeBooking(req, res) {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Lock before checking, so a concurrent cancel or a second click can't
+      // slip in between the checks and the status change.
+      await tx.$queryRaw`SELECT 1 FROM "bookings" WHERE "id" = ${req.params.id} FOR UPDATE`;
+      const current = await tx.booking.findUnique({
+        where: { id: req.params.id },
+        select: { customerId: true, bookingStatus: true, appointmentDate: true, startTime: true, endTime: true },
+      });
+      if (!current) {
+        return { statusCode: 404, error: "Booking not found." };
+      }
+      if (current.customerId !== req.user.userId) {
+        return { statusCode: 403, error: "Only the customer who made the booking can mark it complete." };
+      }
+      if (current.bookingStatus === BookingStatus.COMPLETED) {
+        return { statusCode: 409, error: "This booking is already completed." };
+      }
+      if (!COMPLETABLE_STATUSES.includes(current.bookingStatus)) {
+        return { statusCode: 409, error: "Only a confirmed booking can be completed." };
+      }
+      if (!hasBookingEnded(current)) {
+        return { statusCode: 409, error: "You can confirm completion only after the booking has ended." };
+      }
+
+      return changeBookingStatus(req.params.id, BookingStatus.COMPLETED, { actorId: req.user.userId, client: tx });
+    });
+
+    if (result.error) return res.status(result.statusCode).json({ error: result.error });
+    const { booking } = result;
+    return res.status(200).json({
+      booking: {
+        ...booking,
+        bookingDate: toDateString(booking.bookingDate),
+        appointmentDate: toDateString(booking.appointmentDate),
+        totalPrice: booking.totalPrice === null ? null : Number(booking.totalPrice),
+      },
+    });
+  } catch (err) {
+    console.error("completeBooking error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
 // GET /api/bookings/me — the signed-in customer's bookings for the "My bookings"
 // page (US6-4). Upcoming holds requests and confirmed bookings that haven't
 // started, soonest first; everything else is past, most recent first.
@@ -340,8 +392,11 @@ async function getMyBookings(req, res) {
         totalPrice: booking.totalPrice === null ? null : Number(booking.totalPrice),
         createdAt: booking.createdAt.toISOString(),
         startsAt: startsAt.toISOString(),
+        endsAt: bookingEndsAt(booking).toISOString(),
         // Same rule PATCH /api/bookings/:id/cancel enforces
         canCancel: booking.bookingStatus === BookingStatus.CONFIRMED && !started,
+        // Same rule PATCH /api/bookings/:id/complete enforces (US6-5)
+        canComplete: canCompleteBooking(booking, now),
         service,
         provider: { id: provider.userId, ...provider.user },
       };
@@ -357,4 +412,4 @@ async function getMyBookings(req, res) {
   }
 }
 
-module.exports = { createBooking, updateBookingStatus, cancelBooking, getMyBookings };
+module.exports = { createBooking, updateBookingStatus, cancelBooking, completeBooking, getMyBookings };

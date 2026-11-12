@@ -116,7 +116,7 @@ async function readServiceAvailability(service) {
     prisma.booking.findMany({
       where: {
         serviceId: service.id,
-        bookingStatus: { in: [BookingStatus.WAITING_FOR_CONFIRMATION, BookingStatus.CONFIRMED] },
+        bookingStatus: { in: [BookingStatus.WAITING_FOR_CONFIRMATION, BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },
       },
       select: { appointmentDate: true, startTime: true, endTime: true },
     }),
@@ -214,7 +214,7 @@ async function replaceServiceSlots(service, replacementSlots) {
       const confirmedBookings = await transaction.booking.findMany({
         where: {
           serviceId: service.id,
-          bookingStatus: BookingStatus.CONFIRMED,
+          bookingStatus: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] },
         },
         select: { appointmentDate: true },
       });

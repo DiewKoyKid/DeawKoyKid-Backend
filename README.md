@@ -46,13 +46,15 @@ to add the expiry lookup index.
 as the customer for the "My bookings" page:
 `{ "upcoming": [...], "past": [...] }`. `upcoming` holds bookings that are
 `WAITING_FOR_CONFIRMATION` or `CONFIRMED` and haven't started yet, soonest first;
-everything else (started, cancelled, rejected, expired, completed) is in `past`,
-most recent first.
+everything else (started or `IN_PROGRESS`, cancelled, rejected, expired,
+completed) is in `past`, most recent first.
 
 Each item has `id`, `bookingStatus`, `bookingDate`, `appointmentDate`,
 `startTime`, `endTime`, `duration`, `totalPrice`, `createdAt`, `startsAt` (ISO
-time the booking begins), `canCancel` (the same rule as the cancel endpoint
-below), `service: { id, title, location, coverPhotoUrl }` and
+time the booking begins), `endsAt` (ISO time it ends: the slot's `endTime`, or
+midnight the next day for a booking without a slot), `canCancel` (the same rule
+as the cancel endpoint below), `canComplete` (the same rule as the complete
+endpoint below), `service: { id, title, location, coverPhotoUrl }` and
 `provider: { id, firstname, lastname, profilePhotoUrl }`.
 
 ## Booking cancellation API
@@ -70,6 +72,27 @@ notification.
 Errors: `401` without valid authentication, `403` for anyone but the booking's
 customer, `404` for a missing booking, and `409` for a booking that isn't
 confirmed or has already started.
+
+## Booking progress and completion API (US6-5)
+
+A booking moves `CONFIRMED` → `IN_PROGRESS` → `COMPLETED`:
+
+- **`IN_PROGRESS`**: a background job started with the server checks once a
+  minute and moves every `CONFIRMED` booking whose start time has passed to
+  `IN_PROGRESS`. Nobody is notified. An `IN_PROGRESS` booking still holds its
+  slot and still blocks account deletion.
+- **`PATCH /api/bookings/:id/complete`** requires authentication and takes no
+  body. Only the booking's customer may call it, and only once the booking is
+  `CONFIRMED` or `IN_PROGRESS` and its end time has passed (the job may not have
+  run yet, so a confirmed booking that has ended can be completed too). It returns
+  `200` with `{ "booking": { ... } }`, sets the status to `COMPLETED` (which
+  unlocks `POST /api/reviews`) and notifies the provider.
+
+Errors: `401` without valid authentication, `403` for anyone but the booking's
+customer, `404` for a missing booking, and `409` when the booking hasn't ended
+yet, is already completed, or isn't confirmed. Apply migrations with
+`npx prisma migrate deploy --config prisma7.config.ts` to add the `IN_PROGRESS`
+status.
 
 ## Reviews API
 
@@ -89,6 +112,25 @@ missing booking, and `409` when the booking already has a review. There is no
 payment check because the project has no payment step. Apply migrations with
 `npx prisma migrate deploy --config prisma7.config.ts` to add the one-review-per-booking
 index and the rating check.
+
+### Provider reviews (US8-2)
+
+`GET /api/providers/:id/reviews?page=1&limit=6` is public and returns one page of
+the reviews on all of a provider's services, newest first:
+
+```json
+{
+  "reviews": [{ "id", "author", "rating", "comment", "date", "serviceTitle" }],
+  "summary": { "avgRating": 4.3, "reviewCount": 13 },
+  "meta": { "totalCount": 13, "currentPage": 1, "totalPages": 3, "limit": 6 }
+}
+```
+
+`author` is the reviewer's first name only. `summary` covers every review, not
+just the page; `avgRating` is rounded to 1 decimal and is `null` when there are
+none. `limit` defaults to 6 and is capped at 50; a missing or invalid `page` or
+`limit` uses the default, and a page past the end returns the last page. `404`
+when the user doesn't exist, was deleted, or isn't a provider.
 
 ## In-app notifications API
 
