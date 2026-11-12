@@ -5,7 +5,7 @@ process.env.JWT_SECRET = "chat-test-secret";
 jest.mock("../src/lib/prisma", () => ({
   user: { findUnique: jest.fn() },
   booking: { findUnique: jest.fn() },
-  chatLog: { findMany: jest.fn(), create: jest.fn() },
+  chatLog: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn() },
 }));
 
 const http = require("http");
@@ -20,6 +20,24 @@ const { attachChat } = require("../src/socket/chat.socket");
 const app = express();
 app.use(express.json());
 app.use("/api/bookings", bookingRoutes);
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  res.status(err.status || 500).json({ error: err.message });
+});
+
+const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=", "base64");
+const JPEG = require("fs").readFileSync(require("path").join(__dirname, "../public/uploads/services-cover-photo/service001.jpg"));
+
+function photo(userId = "customer-id", bytes = PNG, type = "image/png", bookingId = "booking-id") {
+  const req = request(app).post(`/api/bookings/${bookingId}/messages/image`);
+  if (userId) req.set("Authorization", `Bearer ${tokenFor(userId)}`);
+  return req.attach("image", bytes, { filename: "photo", contentType: type });
+}
+
+function image(userId, bookingId = "booking-id", messageId = "msg-1") {
+  const req = request(app).get(`/api/bookings/${bookingId}/messages/${messageId}/image`);
+  if (userId) req.set("Authorization", `Bearer ${tokenFor(userId)}`);
+  return req;
+}
 
 const users = {
   "customer-id": { id: "customer-id", firstname: "Cus", lastname: "Tomer" },
@@ -45,6 +63,9 @@ beforeEach(() => {
     where.id === booking.id ? booking : null
   );
   prisma.chatLog.findMany.mockImplementation(async () => stored);
+  prisma.chatLog.findFirst.mockImplementation(async ({ where }) =>
+    stored.find((row) => row.id === where.id && row.bookingId === where.bookingId) || null
+  );
   prisma.chatLog.create.mockImplementation(async ({ data }) => {
     const row = {
       id: `msg-${stored.length + 1}`,
@@ -124,8 +145,9 @@ describe("Socket.IO chat", () => {
   const sockets = [];
 
   beforeAll(async () => {
-    server = http.createServer();
+    server = http.createServer(app);
     const io = attachChat(server);
+    app.set("chatIo", io);
     server.once("close", () => io.close());
     await new Promise((resolve) => server.listen(0, resolve));
     url = `http://localhost:${server.address().port}`;
@@ -206,5 +228,89 @@ describe("Socket.IO chat", () => {
     expect(
       await emit(customer, "chat:message", { bookingId: "booking-id", content: "   " })
     ).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it.each(["customer-id", "provider-id"])("delivers %s's photo once and includes it in history", async (senderId) => {
+    const recipientId = senderId === "customer-id" ? "provider-id" : "customer-id";
+    const recipient = open(recipientId);
+    await emit(recipient, "chat:join", { bookingId: "booking-id" });
+    const received = once(recipient, "chat:message");
+    const res = await photo(senderId).field("content", "Meeting point");
+    expect(res.status).toBe(201);
+    expect(await received).toEqual(res.body.message);
+    expect(res.body.message).toMatchObject({ senderId, content: "Meeting point", imageUrl: expect.stringContaining("/image") });
+    expect(res.body.message.imageData).toBeUndefined();
+    expect((await history(recipientId)).body.messages).toEqual([res.body.message]);
+    expect(prisma.chatLog.create).toHaveBeenCalledTimes(1);
+    expect((await image(recipientId)).body).toEqual(PNG);
+  });
+});
+
+describe("Booking photo uploads and private retrieval", () => {
+  it.each([["image/png", PNG], ["image/jpeg", JPEG]])("accepts %s and serves it only through the booking route", async (type, bytes) => {
+    const res = await photo("customer-id", bytes, type);
+    expect(res.status).toBe(201);
+    expect(res.body.message.content).toBe("");
+    const download = await image("provider-id");
+    expect(download.status).toBe(200);
+    expect(download.headers["content-type"]).toContain(type);
+    expect(download.headers["cache-control"]).toBe("private, no-store");
+    expect(download.body).toEqual(bytes);
+  });
+
+  it.each([[null, 401], ["stranger-id", 403]])("rejects upload and retrieval by %s", async (actor, status) => {
+    expect((await photo(actor)).status).toBe(status);
+    expect((await image(actor)).status).toBe(status);
+    expect(prisma.chatLog.create).not.toHaveBeenCalled();
+    expect(prisma.chatLog.findFirst).not.toHaveBeenCalled();
+  });
+
+  it.each(["WAITING_FOR_CONFIRMATION", "REJECTED", "EXPIRED", "CANCELLED", "COMPLETED"])("denies both participants uploading when %s", async (status) => {
+    booking.bookingStatus = status;
+    for (const actor of ["customer-id", "provider-id"]) {
+      expect((await photo(actor)).status).toBe(403);
+    }
+    expect(prisma.chatLog.create).not.toHaveBeenCalled();
+  });
+
+  it("allows completed history photos but denies cancelled history photos", async () => {
+    await photo();
+    booking.bookingStatus = "COMPLETED";
+    expect((await image("provider-id")).status).toBe(200);
+    booking.bookingStatus = "CANCELLED";
+    expect((await image("provider-id")).status).toBe(403);
+  });
+
+  it("returns 404 for missing bookings, images, and images from another booking", async () => {
+    expect((await photo("customer-id", PNG, "image/png", "missing")).status).toBe(404);
+    expect((await image("customer-id")).status).toBe(404);
+    stored.push({ id: "msg-1", bookingId: "other-booking", imageData: PNG, imageMimeType: "image/png" });
+    expect((await image("customer-id")).status).toBe(404);
+  });
+
+  it.each([
+    ["small MP4", Buffer.alloc(32), "video/mp4"],
+    ["30 MB MP4", Buffer.alloc(30 * 1024 * 1024), "video/mp4"],
+    ["oversized PNG", Buffer.concat([PNG, Buffer.alloc(5 * 1024 * 1024)]), "image/png"],
+    ["spoofed PNG", Buffer.from("not an image"), "image/png"],
+    ["GIF", Buffer.from("GIF89a"), "image/gif"],
+  ])("rejects %s without storing a message", async (_name, bytes, type) => {
+    expect((await photo("customer-id", bytes, type)).status).toBe(400);
+    expect(prisma.chatLog.create).not.toHaveBeenCalled();
+  });
+
+  it("accepts exactly 5 MB", async () => {
+    const bytes = Buffer.alloc(5 * 1024 * 1024);
+    PNG.copy(bytes);
+    expect((await photo("provider-id", bytes)).status).toBe(201);
+  });
+
+  it("rejects missing files, extra files, and oversized captions", async () => {
+    const base = () => request(app).post("/api/bookings/booking-id/messages/image")
+      .set("Authorization", `Bearer ${tokenFor("customer-id")}`);
+    expect((await base()).status).toBe(400);
+    expect((await photo().attach("image", PNG, { filename: "second.png", contentType: "image/png" })).status).toBe(400);
+    expect((await photo().field("content", "x".repeat(2001))).status).toBe(400);
+    expect(prisma.chatLog.create).not.toHaveBeenCalled();
   });
 });

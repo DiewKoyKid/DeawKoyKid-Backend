@@ -58,6 +58,7 @@ const MESSAGE_SELECT = {
   bookingId: true,
   senderId: true,
   content: true,
+  imageMimeType: true,
   timestamp: true,
   sender: { select: { firstname: true, lastname: true, profilePhotoUrl: true } },
 };
@@ -70,6 +71,7 @@ function toMessage(row) {
     senderName: [row.sender?.firstname, row.sender?.lastname].filter(Boolean).join(" "),
     senderPhotoUrl: row.sender?.profilePhotoUrl ?? null,
     content: row.content,
+    imageUrl: row.imageMimeType ? `/api/bookings/${row.bookingId}/messages/${row.id}/image` : null,
     timestamp: row.timestamp.toISOString(),
   };
 }
@@ -94,10 +96,12 @@ function validateContent(content) {
   return text;
 }
 
-async function createMessage(bookingId, senderId, content) {
-  const text = validateContent(content);
+async function createMessage(bookingId, senderId, content, image = null) {
+  const text = image && (content === undefined || content === "") ? "" : validateContent(content);
   const row = await prisma.chatLog.create({
-    data: { bookingId, senderId, content: text },
+    data: { bookingId, senderId, content: text,
+      ...(image ? { imageData: image.buffer, imageMimeType: image.mimetype } : {}),
+    },
     select: MESSAGE_SELECT,
   });
   return toMessage(row);

@@ -1,4 +1,40 @@
-const { getChatAccess, listMessages } = require("../services/chat.service");
+const { getChatAccess, listMessages, createMessage } = require("../services/chat.service");
+const prisma = require("../lib/prisma");
+const { hasImageSignature } = require("../middlewares/chatPhotoUpload");
+
+async function requireChatWrite(req, res, next) {
+  try {
+    await getChatAccess(req.params.id, req.user.userId, { write: true });
+    next();
+  } catch (err) { next(err); }
+}
+
+// Multipart upload also creates the message, so there are no unused attachments.
+async function sendChatPhoto(req, res, next) {
+  try {
+    if (!req.file || !hasImageSignature(req.file)) {
+      return res.status(400).json({ error: "Photo must be a JPG or PNG image." });
+    }
+    // Recheck after receiving the upload in case the booking changed meanwhile.
+    await getChatAccess(req.params.id, req.user.userId, { write: true });
+    const message = await createMessage(req.params.id, req.user.userId, req.body.content, req.file);
+    req.app.get("chatIo")?.to(`booking:${req.params.id}`).emit("chat:message", message);
+    res.status(201).json({ message });
+  } catch (err) { next(err); }
+}
+
+async function getChatPhoto(req, res, next) {
+  try {
+    await getChatAccess(req.params.id, req.user.userId);
+    const message = await prisma.chatLog.findFirst({
+      where: { id: req.params.messageId, bookingId: req.params.id },
+      select: { imageData: true, imageMimeType: true },
+    });
+    if (!message?.imageData) return res.status(404).json({ error: "Photo not found." });
+    res.set({ "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" });
+    res.type(message.imageMimeType).send(Buffer.from(message.imageData));
+  } catch (err) { next(err); }
+}
 
 // GET /api/bookings/:id/messages — chat history, oldest first (US7-1)
 async function getBookingMessages(req, res, next) {
@@ -34,4 +70,4 @@ async function getBookingMessages(req, res, next) {
   }
 }
 
-module.exports = { getBookingMessages };
+module.exports = { getBookingMessages, requireChatWrite, sendChatPhoto, getChatPhoto };

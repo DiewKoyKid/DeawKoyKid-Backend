@@ -193,6 +193,8 @@ model ChatLog {
   bookingId String
   senderId  String
   content   String
+  imageData Bytes?
+  imageMimeType String?
   timestamp DateTime @default(now())
 
   booking Booking @relation(fields: [bookingId], references: [id])
