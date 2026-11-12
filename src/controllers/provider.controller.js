@@ -150,4 +150,68 @@ async function getMyBookingRequests(req, res) {
   }
 }
 
-module.exports = { getMyServices, getMyBookingRequests };
+// GET /api/providers/me/services/:id (US4-3)
+// One of the signed-in provider's own services, for the edit page. Unlike
+// GET /api/services/:id it also returns unpublished services, the category
+// ids, and how many requests are pending and bookings confirmed.
+async function getMyService(req, res) {
+  try {
+    const { userId } = req.user; // attached by authenticateToken
+
+    const service = await prisma.service.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        providerId: true,
+        title: true,
+        description: true,
+        location: true,
+        rate: true,
+        rateUnit: true,
+        startTime: true,
+        endTime: true,
+        coverPhotoUrl: true,
+        isPublished: true,
+        serviceCategories: { select: { categoryId: true } },
+      },
+    });
+    if (!service) {
+      return res.status(404).json({ error: "Service not found." });
+    }
+    if (service.providerId !== userId) {
+      return res.status(403).json({ error: "You can only edit your own services." });
+    }
+
+    const [pendingRequestCount, confirmedBookingCount] = await Promise.all([
+      // Same rule the unpublish check uses, so the two numbers agree
+      prisma.booking.count({
+        where: {
+          serviceId: service.id,
+          bookingStatus: BookingStatus.WAITING_FOR_CONFIRMATION,
+          createdAt: { gt: new Date(Date.now() - RESPONSE_WINDOW_MS) },
+        },
+      }),
+      prisma.booking.count({
+        where: { serviceId: service.id, bookingStatus: BookingStatus.CONFIRMED },
+      }),
+    ]);
+
+    const { serviceCategories, isPublished, rate, rateUnit, ...rest } = service;
+    return res.status(200).json({
+      service: {
+        ...rest,
+        rate: Number(rate), // Prisma Decimal would otherwise serialize as a string
+        rateUnit: rateUnit || DEFAULT_RATE_UNIT,
+        status: isPublished ? "PUBLISHED" : "UNPUBLISHED",
+        categoryIds: serviceCategories.map((link) => link.categoryId),
+        pendingRequestCount,
+        confirmedBookingCount,
+      },
+    });
+  } catch (err) {
+    console.error("getMyService error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { getMyServices, getMyService, getMyBookingRequests };
