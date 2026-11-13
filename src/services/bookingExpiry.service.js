@@ -1,11 +1,11 @@
 const prisma = require("../lib/prisma");
-const { changeBookingStatus } = require("./booking.service");
+const { changeBookingStatus, bookingTransaction } = require("./booking.service");
 const { BookingStatus, BOOKING_RESPONSE_WINDOW_MS, isUnansweredBookingExpired } = require("../utils/bookingStatus");
 
 // Recheck under the same row lock used by provider decisions. A decision or
 // another worker may have handled this booking since the candidate query.
 async function expireUnansweredBooking(bookingId) {
-  return prisma.$transaction(async (tx) => {
+  return bookingTransaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 FROM "bookings" WHERE "id" = ${bookingId} FOR UPDATE`;
     const booking = await tx.booking.findUnique({
       where: { id: bookingId },

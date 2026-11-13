@@ -16,6 +16,7 @@ model User {
   id              String    @id @default(uuid())
   username        String    @unique @db.VarChar(50)
   email           String?   @unique @db.VarChar(254)
+  emailNotificationsEnabled Boolean @default(true)
   password        String    @db.VarChar(255)
   firstname       String    @db.VarChar(80)
   lastname        String    @db.VarChar(80)
@@ -31,6 +32,10 @@ model User {
   // Set when the user deletes their account (US2-3). The row stays, anonymised,
   // so their bookings, reviews, chat logs and reports still resolve.
   deletedAt       DateTime?
+  // Login lockout (US1-3): wrong passwords in a row since the last success or
+  // lock, and when the current lock ends.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -244,16 +249,21 @@ model Report {
   @@map("reports")
 }
 
+// Booking chat messages (US7-1). Only the customer and provider of a confirmed
+// booking can read or send them; see src/services/chat.service.js.
 model ChatLog {
   id        String   @id @default(uuid())
   bookingId String
   senderId  String
   content   String
-  timestamp DateTime
+  imageData Bytes?
+  imageMimeType String?
+  timestamp DateTime @default(now())
 
   booking Booking @relation(fields: [bookingId], references: [id])
   sender  User    @relation("ChatLogSender", fields: [senderId], references: [id])
 
+  @@index([bookingId, timestamp])
   @@map("chat_logs")
 }
 

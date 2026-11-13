@@ -78,4 +78,12 @@ function sendPasswordResetEmail({ to, firstname, token }) {
   });
 }
 
-module.exports = { sendMail, sendAccountDeletedEmail, sendPasswordResetEmail };
+function sendBookingNotificationEmail({ to, notification }) {
+  return sendMail({
+    to,
+    subject: "Your booking status has changed",
+    text: `${notification.message}\n\nOpen Togethr to view your booking details.\n\nYou can turn off booking emails in Notifications settings.`,
+  });
+}
+
+module.exports = { sendMail, sendAccountDeletedEmail, sendPasswordResetEmail, sendBookingNotificationEmail };

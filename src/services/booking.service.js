@@ -1,5 +1,5 @@
 const prisma = require("../lib/prisma");
-const { notifyBookingStatusChange } = require("./notification.service");
+const { notifyBookingStatusChange, sendBookingStatusEmails } = require("./notification.service");
 
 const BOOKING_FIELDS = {
   id: true,
@@ -24,7 +24,7 @@ const BOOKING_FIELDS = {
 // booking already had that status).
 function changeBookingStatus(bookingId, nextStatus, { actorId = null, client = prisma } = {}) {
   const run = (tx) => applyStatusChange(tx, bookingId, nextStatus, actorId);
-  return client.$transaction ? client.$transaction(run) : run(client);
+  return client === prisma ? bookingTransaction(run) : run(client);
 }
 
 async function applyStatusChange(tx, bookingId, nextStatus, actorId) {
@@ -55,4 +55,12 @@ async function applyStatusChange(tx, bookingId, nextStatus, actorId) {
   return { booking, notifications };
 }
 
-module.exports = { changeBookingStatus };
+// Use this wrapper for outer booking transactions so email starts after commit,
+// including expiry changes that return an HTTP conflict to the caller.
+async function bookingTransaction(run) {
+  const result = await prisma.$transaction(run);
+  await sendBookingStatusEmails(result?.notifications);
+  return result;
+}
+
+module.exports = { changeBookingStatus, bookingTransaction };
