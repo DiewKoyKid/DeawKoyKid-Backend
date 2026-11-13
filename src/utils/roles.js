@@ -5,6 +5,7 @@ function rolesFor(user) {
   const roles = [];
   if (user.customer) roles.push("CUSTOMER");
   if (user.provider) roles.push("PROVIDER");
+  if (user.isAdmin) roles.push("ADMIN");
   return roles;
 }
 

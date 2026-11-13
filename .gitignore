@@ -1,4 +1,5 @@
 node_modules/
+storage/complaints/
 .env
 .env.*
 !.env.example
@@ -10,3 +11,9 @@ public/uploads/profile-photos/
 # Only the seed's sample photos are kept in git.
 public/uploads/*
 !public/uploads/services-cover-photo/
+
+
+
+postman/
+# Jest coverage reports (npm run test:unit:coverage)
+coverage/

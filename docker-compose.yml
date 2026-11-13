@@ -12,5 +12,18 @@ services:
     volumes:
       - deawkoykid-pgdata:/var/lib/postgresql/data
 
+  # Dev/test only: fake SMTP server that keeps every email, used by the frontend's
+  # Playwright tests (togethr-frontend/e2e).
+  # Opt-in: starts only with `docker compose --profile test up -d`.
+  # Web UI and API: http://localhost:8025. Backend: SMTP_HOST=127.0.0.1 SMTP_PORT=1025
+  # (not "localhost": Node resolves that to ::1, and the ports are bound to IPv4 only)
+  mailpit:
+    image: axllent/mailpit
+    container_name: deawkoykid-mailpit
+    profiles: ["test"]
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
 volumes:
   deawkoykid-pgdata:

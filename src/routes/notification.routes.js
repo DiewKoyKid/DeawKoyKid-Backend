@@ -5,6 +5,8 @@ const notificationController = require("../controllers/notification.controller")
 const router = express.Router();
 
 router.use(authenticateToken);
+router.get("/settings", notificationController.getNotificationSettings);
+router.patch("/settings", notificationController.updateNotificationSettings);
 router.get("/", notificationController.getMyNotifications);
 router.patch("/read-all", notificationController.markAllNotificationsAsRead);
 router.patch("/:id/read", notificationController.markNotificationAsRead);

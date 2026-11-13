@@ -64,6 +64,7 @@ async function deleteAccount(userId) {
       where: { id: userId },
       data: {
         deletedAt: new Date(),
+        isAdmin: false,
         username: `deleted_${userId}`,
         email: null, // frees the address so they can register again
         password: unusablePassword,
