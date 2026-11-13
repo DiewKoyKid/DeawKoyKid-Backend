@@ -15,3 +15,5 @@ public/uploads/*
 
 
 postman/
+# Jest coverage reports (npm run test:unit:coverage)
+coverage/
