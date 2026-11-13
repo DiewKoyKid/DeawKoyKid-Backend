@@ -134,6 +134,7 @@ model ServiceCategory {
 enum BookingStatus {
   WAITING_FOR_CONFIRMATION
   CONFIRMED
+  IN_PROGRESS
   REJECTED
   EXPIRED
   CANCELLED

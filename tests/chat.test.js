@@ -127,6 +127,13 @@ describe("GET /api/bookings/:id/messages", () => {
     }
   );
 
+  it("keeps the chat open while the trip is IN_PROGRESS (US6-5)", async () => {
+    booking.bookingStatus = "IN_PROGRESS";
+    const res = await history("customer-id");
+    expect(res.status).toBe(200);
+    expect(res.body.booking.canSend).toBe(true);
+  });
+
   it("keeps history readable but closed for sending once COMPLETED", async () => {
     booking.bookingStatus = "COMPLETED";
     const res = await history("customer-id");

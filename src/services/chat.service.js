@@ -1,11 +1,12 @@
 // Booking chat (US7-1). Only the customer and the provider of a booking can
 // use its chat, and only once the provider has confirmed it. History stays
-// readable after the trip is completed, but new messages need CONFIRMED.
+// readable after the trip is completed, but new messages need CONFIRMED or
+// IN_PROGRESS (the trip has started: US6-5's booking progress job).
 const prisma = require("../lib/prisma");
 
 const MAX_MESSAGE_LENGTH = 2000;
-const READABLE_STATUSES = ["CONFIRMED", "COMPLETED"];
-const WRITABLE_STATUSES = ["CONFIRMED"];
+const READABLE_STATUSES = ["CONFIRMED", "IN_PROGRESS", "COMPLETED"];
+const WRITABLE_STATUSES = ["CONFIRMED", "IN_PROGRESS"];
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -109,6 +110,7 @@ async function createMessage(bookingId, senderId, content, image = null) {
 
 module.exports = {
   MAX_MESSAGE_LENGTH,
+  WRITABLE_STATUSES,
   getChatAccess,
   listMessages,
   createMessage,

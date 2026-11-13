@@ -192,7 +192,7 @@ async function getMyService(req, res) {
         },
       }),
       prisma.booking.count({
-        where: { serviceId: service.id, bookingStatus: BookingStatus.CONFIRMED },
+        where: { serviceId: service.id, bookingStatus: { in: [BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS] } },
       }),
     ]);
 
@@ -214,4 +214,74 @@ async function getMyService(req, res) {
   }
 }
 
-module.exports = { getMyServices, getMyService, getMyBookingRequests };
+// US8-2: page size for a provider's reviews, and the most a client may ask for
+const REVIEWS_DEFAULT_LIMIT = 6;
+const REVIEWS_MAX_LIMIT = 50;
+
+// A positive whole number from the query string, or the fallback when it's
+// missing or not one ("abc", "0", "-2", "1.5").
+function positiveInt(value, fallback) {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return fallback;
+  const number = Number(value);
+  return number >= 1 ? number : fallback;
+}
+
+// GET /api/providers/:id/reviews?page=1&limit=6 (US8-2) — public. One page of
+// the reviews on all of the provider's services, newest first, plus the
+// average and count over every review. A page past the end returns the last.
+// 404 when the user doesn't exist, was deleted, or isn't a provider.
+async function getProviderReviews(req, res) {
+  try {
+    const provider = await prisma.provider.findUnique({
+      where: { userId: req.params.id },
+      select: { userId: true, user: { select: { deletedAt: true } } },
+    });
+    if (!provider || provider.user.deletedAt) {
+      return res.status(404).json({ error: "Provider not found." });
+    }
+
+    const where = { booking: { service: { providerId: provider.userId } } };
+    const limit = Math.min(positiveInt(req.query.limit, REVIEWS_DEFAULT_LIMIT), REVIEWS_MAX_LIMIT);
+    const { _avg, _count } = await prisma.review.aggregate({ where, _avg: { rating: true }, _count: true });
+    const totalPages = Math.max(1, Math.ceil(_count / limit));
+    const currentPage = Math.min(positiveInt(req.query.page, 1), totalPages);
+
+    const reviews = await prisma.review.findMany({
+      where,
+      // id breaks ties, so two reviews posted at the same moment never swap pages
+      orderBy: [{ timestamp: "desc" }, { id: "asc" }],
+      skip: (currentPage - 1) * limit,
+      take: limit,
+      select: {
+        id: true,
+        rating: true,
+        comment: true,
+        timestamp: true,
+        customer: { select: { user: { select: { firstname: true } } } },
+        booking: { select: { service: { select: { title: true } } } },
+      },
+    });
+
+    return res.status(200).json({
+      // Same shape as the reviews in GET /api/users/:id
+      reviews: reviews.map((review) => ({
+        id: review.id,
+        author: review.customer.user.firstname,
+        rating: review.rating,
+        comment: review.comment,
+        date: review.timestamp,
+        serviceTitle: review.booking.service.title,
+      })),
+      summary: {
+        avgRating: _count === 0 ? null : Math.round(_avg.rating * 10) / 10,
+        reviewCount: _count,
+      },
+      meta: { totalCount: _count, currentPage, totalPages, limit },
+    });
+  } catch (err) {
+    console.error("getProviderReviews error:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+}
+
+module.exports = { getMyServices, getMyService, getMyBookingRequests, getProviderReviews };

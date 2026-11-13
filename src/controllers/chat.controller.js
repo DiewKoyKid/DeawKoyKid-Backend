@@ -1,4 +1,4 @@
-const { getChatAccess, listMessages, createMessage } = require("../services/chat.service");
+const { getChatAccess, listMessages, createMessage, WRITABLE_STATUSES } = require("../services/chat.service");
 const prisma = require("../lib/prisma");
 const { hasImageSignature } = require("../middlewares/chatPhotoUpload");
 
@@ -51,7 +51,7 @@ async function getBookingMessages(req, res, next) {
         appointmentDate: booking.appointmentDate?.toISOString().slice(0, 10) ?? null,
         startTime: booking.startTime ?? null,
         endTime: booking.endTime ?? null,
-        canSend: booking.bookingStatus === "CONFIRMED",
+        canSend: WRITABLE_STATUSES.includes(booking.bookingStatus),
       },
       role,
       otherParty: other
