@@ -7,7 +7,8 @@
     "postinstall": "prisma generate",
     "test": "jest --runInBand",
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "seed:test": "node prisma/seed.test.js"
   },
   "repository": {
     "type": "git",
@@ -42,5 +43,11 @@
   },
   "prisma": {
     "seed": "node prisma/seed.js"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/prisma/"
+    ]
   }
 }

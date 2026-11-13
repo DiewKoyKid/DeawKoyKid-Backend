@@ -276,6 +276,32 @@ console as `password reset email failed`:
   typos in the stored email), or the account is deleted.
 - Email arrives but the link opens the wrong site: fix `FRONTEND_URL`.
 
+## Test plan seed
+
+`npm run seed:test` (`prisma/seed.test.js`) loads the fixed data the course
+2110423 test plan refers to. Use it on a test database, not on the shared
+demo data; it refuses to run with `NODE_ENV=production`.
+
+1. Apply migrations to the test database and start the backend against it.
+2. Register `somchai@gmail.com` as a customer and `somsri@gmail.com` as a
+   provider through the API (`POST /api/auth/register`,
+   `POST /api/auth/register/provider`). The seed looks them up by email and
+   stops with an error if either is missing.
+3. Run `npm run seed:test`. It creates customers nida (`nida@gmail.com` /
+   `Nida@2026`) and kanya (`kanya@gmail.com` / `Kanya@2026`), an account
+   deleted the same way as `DELETE /api/users/me` (`deleted.user@gmail.com`),
+   an expired reset link T2 for nida, somsri's services SV-001 (published, with
+   slots SL-01 to SL-03) and SV-002 (unpublished), and somchai's bookings
+   BK-1001 to BK-1010 on SV-001. It prints a table of their ids and T2's raw
+   token.
+
+Run it again before each test round: it first removes what the previous run
+created, including reviews, complaints and chat on the seeded bookings and
+bookings made by nida and kanya, then recreates everything with the same ids
+(only T2 changes). somchai and somsri themselves are kept. BK-1002 is created
+25 hours old, so the expiry job marks it `EXPIRED` within a minute of the
+backend running.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
