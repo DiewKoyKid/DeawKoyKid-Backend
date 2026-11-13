@@ -10,6 +10,13 @@ const COOKIE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes, matches JWT_EXPIRES_IN 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_PATTERN = /^0\d{9}$/;
 
+// US1-3 (TC26): the 5th wrong password in a row locks the account for 15 minutes
+const MAX_FAILED_LOGINS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000;
+const INVALID_LOGIN = "invalid email or password";
+const LOCKED_NOW = "invalid email or password; the account is locked for 15 minutes";
+const STILL_LOCKED = "this account is temporarily locked; try again later";
+
 function normalizeEmail(email) {
   return email.trim().toLowerCase();
 }
@@ -267,14 +274,41 @@ async function login(req, res, next) {
       },
     });
 
-    // A deleted account gets the same answer as an unknown one
+    // A deleted account gets the same answer as an unknown one, and neither
+    // counts towards a lockout
     if (!user || user.deletedAt) {
-      return res.status(401).json({ error: "invalid email or password" });
+      return res.status(401).json({ error: INVALID_LOGIN });
+    }
+
+    // While locked, don't even check the password, so a correct guess
+    // doesn't confirm itself
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      return res.status(423).json({ error: STILL_LOCKED });
     }
 
     const passwordMatches = await comparePassword(password, user.password);
     if (!passwordMatches) {
-      return res.status(401).json({ error: "invalid email or password" });
+      // Incremented in the database so simultaneous attempts all count
+      const { failedLoginAttempts } = await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: { increment: 1 } },
+        select: { failedLoginAttempts: true },
+      });
+      if (failedLoginAttempts >= MAX_FAILED_LOGINS) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { failedLoginAttempts: 0, lockedUntil: new Date(Date.now() + LOCKOUT_MS) },
+        });
+        return res.status(423).json({ error: LOCKED_NOW });
+      }
+      return res.status(401).json({ error: INVALID_LOGIN });
+    }
+
+    if (user.failedLoginAttempts !== 0 || user.lockedUntil) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts: 0, lockedUntil: null },
+      });
     }
 
     const token = signToken({ userId: user.id });

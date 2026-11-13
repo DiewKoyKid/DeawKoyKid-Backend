@@ -32,6 +32,10 @@ model User {
   // Set when the user deletes their account (US2-3). The row stays, anonymised,
   // so their bookings, reviews, chat logs and reports still resolve.
   deletedAt       DateTime?
+  // Login lockout (US1-3): wrong passwords in a row since the last success or
+  // lock, and when the current lock ends.
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
