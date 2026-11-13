@@ -1,5 +1,30 @@
 const prisma = require("../lib/prisma");
 
+async function getNotificationSettings(req, res, next) {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId },
+      select: { emailNotificationsEnabled: true },
+    });
+    if (!user) return res.status(404).json({ error: "User not found." });
+    res.json(user);
+  } catch (err) { next(err); }
+}
+
+async function updateNotificationSettings(req, res, next) {
+  const { emailNotificationsEnabled } = req.body || {};
+  if (typeof emailNotificationsEnabled !== "boolean") {
+    return res.status(400).json({ error: "emailNotificationsEnabled must be a boolean." });
+  }
+  try {
+    const user = await prisma.user.update({
+      where: { id: req.user.userId },
+      data: { emailNotificationsEnabled },
+      select: { emailNotificationsEnabled: true },
+    });
+    res.json(user);
+  } catch (err) { next(err); }
+}
+
 async function getMyNotifications(req, res, next) {
   try {
     const notifications = await prisma.notification.findMany({
@@ -58,6 +83,8 @@ async function markAllNotificationsAsRead(req, res, next) {
 }
 
 module.exports = {
+  getNotificationSettings,
+  updateNotificationSettings,
   getMyNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,

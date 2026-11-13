@@ -1,3 +1,4 @@
+jest.mock("../src/services/mail.service", () => ({ sendBookingNotificationEmail: jest.fn() }));
 require("dotenv").config();
 const request = require("supertest");
 const app = require("../src/app");
@@ -669,10 +670,5 @@ describe("PATCH /api/bookings/:id/status (US6-2, F49)", () => {
 
 // ---------------------------------------------------------------------------
 // US6-3 — email turned off means in-app only (F54)
-// The status-change hook (F52) is in; waiting on Max's email sending with the
-// user's email setting (F53).
+// Preference, delivery, and rollback cases live in notificationEmail.test.js.
 // ---------------------------------------------------------------------------
-describe("booking status notifications (US6-3, F54)", () => {
-  it.todo("a user with email notifications off gets only an in-app notification when their booking status changes, and no email is sent");
-  it.todo("a user with email notifications on gets both an in-app notification and an email");
-});
