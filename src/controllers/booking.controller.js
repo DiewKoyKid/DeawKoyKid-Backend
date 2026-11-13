@@ -1,5 +1,6 @@
 const prisma = require("../lib/prisma");
 const { notifyProviderOfNewBooking } = require("../services/notification.service");
+const { notificationsChanged } = require("../services/notificationEvents");
 const { changeBookingStatus, bookingTransaction } = require("../services/booking.service");
 const {
   BookingStatus,
@@ -179,6 +180,7 @@ async function createBooking(req, res) {
       throw err;
     }
 
+    notificationsChanged(service.providerId);
     return res.status(201).json({
       booking: {
         ...booking,

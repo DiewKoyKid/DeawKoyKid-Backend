@@ -8,6 +8,7 @@
 // The socket is authenticated with the same JWT as the REST API: the `token`
 // cookie, or `auth.token` in the handshake.
 const { Server } = require("socket.io");
+const { notificationEvents } = require("../services/notificationEvents");
 const prisma = require("../lib/prisma");
 const { verifyToken } = require("../utils/jwt");
 const { getChatAccess, createMessage } = require("../services/chat.service");
@@ -86,7 +87,15 @@ function attachChat(httpServer) {
     },
   });
   io.use(authenticateSocket);
-  io.on("connection", (socket) => registerChatHandlers(io, socket));
+  io.on("connection", (socket) => {
+    socket.join(`user:${socket.data.userId}`);
+    registerChatHandlers(io, socket);
+  });
+  const onNotificationsChanged = (userId) => {
+    io.to(`user:${userId}`).emit("notifications:changed");
+  };
+  notificationEvents.on("changed", onNotificationsChanged);
+  httpServer.once("close", () => notificationEvents.off("changed", onNotificationsChanged));
   return io;
 }
 
