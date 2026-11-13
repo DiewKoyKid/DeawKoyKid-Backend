@@ -41,5 +41,11 @@
   },
   "prisma": {
     "seed": "node prisma/seed.js"
+  },
+  "jest": {
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/prisma/"
+    ]
   }
 }
