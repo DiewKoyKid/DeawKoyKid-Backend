@@ -14,6 +14,7 @@
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "docs:generate": "node scripts/generate-postman.js && node scripts/generate-openapi.js",
     "bookings:expire": "node scripts/expire-bookings.js"
   },
   "repository": {
@@ -38,7 +39,8 @@
     "multer": "^2.4.0",
     "nodemailer": "^10.5.0",
     "pg": "^8.23.0",
-    "socket.io": "^4.8.4"
+    "socket.io": "^4.8.4",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "jest": "^30.5.1",

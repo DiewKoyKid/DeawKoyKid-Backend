@@ -32,6 +32,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run db:validate
+      - run: npm run docs:generate && git diff --exit-code -- api-tests/togethr-backend.postman_collection.json docs/openapi.json
       - run: npm run db:migrate
       - run: npm test
       - run: npm audit --audit-level=high

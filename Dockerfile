@@ -6,6 +6,7 @@ COPY prisma ./prisma
 RUN npm ci
 COPY src ./src
 COPY scripts ./scripts
+COPY docs ./docs
 COPY server.js ./
 COPY public ./public
 FROM dependencies AS migration

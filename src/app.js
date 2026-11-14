@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
+const swaggerUi = require('swagger-ui-express');
+const openApi = require('../docs/openapi.json');
 
 const authRoutes = require("./routes/auth.routes");
 const userRoutes = require("./routes/user.routes");
@@ -24,6 +26,8 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+app.get('/openapi.json', (req, res) => res.json(openApi));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApi));
 
 // Serve static files from the public folder
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));

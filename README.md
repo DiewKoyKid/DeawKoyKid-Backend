@@ -359,3 +359,5 @@ backend running.
    ```
 
 ดูขั้นตอนที่เหลือ (ติดตั้ง dependencies, ตั้งค่า `.env`, เปิด PostgreSQL, รัน migration, สตาร์ทเซิร์ฟเวอร์) ได้ที่ [SETUP.md](./SETUP.md)
+API reference: start the backend and open `/api-docs/` for Swagger UI or `/openapi.json` for the OpenAPI document. Run `npm run docs:generate` after changing routes. Request and response schemas are provisional; check controller validation before using write operations.
+
