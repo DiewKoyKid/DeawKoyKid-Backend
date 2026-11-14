@@ -19,7 +19,7 @@ function birthdate(age) {
   return new Date(Date.UTC(today.getFullYear() - age, today.getMonth() - 1, 1));
 }
 
-async function createProvider(name, gender, age, avgRating) {
+async function createProvider(name, gender, age, avgRating = null) {
   const user = await prisma.user.create({
     data: {
       username: `filter_${name}_${RUN}`,
@@ -47,6 +47,26 @@ async function createService(providerId, title, rate, categories) {
   });
 }
 
+// Gives a service one completed, reviewed booking per rating. The rating filter
+// and sort use these, not the provider's avgRating.
+let reviewer;
+async function addReviews(service, ratings) {
+  for (const rating of ratings) {
+    const booking = await prisma.booking.create({
+      data: {
+        serviceId: service.id,
+        customerId: reviewer.id,
+        bookingDate: new Date("2026-10-01"),
+        appointmentDate: new Date("2026-10-10"),
+        bookingStatus: "COMPLETED",
+      },
+    });
+    await prisma.review.create({
+      data: { bookingId: booking.id, customerId: reviewer.id, rating },
+    });
+  }
+}
+
 async function search(query) {
   const res = await request(app)
     .get("/api/services/search")
@@ -61,19 +81,40 @@ beforeAll(async () => {
     createdCategoryIds.push(category.id);
   }
 
-  const ann = await createProvider("Ann", "F", 25, 4.8);
-  const bob = await createProvider("Bob", "M", 32, 4.2);
-  const cat = await createProvider("Cat", "F", 41, 3.5);
-  const dee = await createProvider("Dee", "O", 28, null);
+  reviewer = await prisma.user.create({
+    data: {
+      username: `filter_reviewer_${RUN}`,
+      password: "not-used",
+      firstname: "Reviewer",
+      lastname: "Tester",
+      customer: { create: {} },
+    },
+  });
+  createdUserIds.push(reviewer.id);
 
-  await createService(ann.id, "temple tour", 500, [FOOD]);
-  await createService(ann.id, "cooking class", 1200, [FOOD, CULTURE]);
-  await createService(bob.id, "photo walk", 800, [PHOTO]);
-  await createService(cat.id, "night market", 300, [FOOD, PHOTO]);
+  // The providers' own avgRating is deliberately set to the opposite of their
+  // services' ratings: filtering and sorting must follow the service's reviews.
+  const ann = await createProvider("Ann", "F", 25, 1);
+  const bob = await createProvider("Bob", "M", 32, 5);
+  const cat = await createProvider("Cat", "F", 41, 5);
+  const dee = await createProvider("Dee", "O", 28, 5);
+
+  const templeTour = await createService(ann.id, "temple tour", 500, [FOOD]);
+  const cookingClass = await createService(ann.id, "cooking class", 1200, [FOOD, CULTURE]);
+  const photoWalk = await createService(bob.id, "photo walk", 800, [PHOTO]);
+  const nightMarket = await createService(cat.id, "night market", 300, [FOOD, PHOTO]);
   await createService(dee.id, "museum day", 700, [CULTURE]);
+
+  await addReviews(templeTour, [5, 5]); // 5.0
+  await addReviews(cookingClass, [5, 4, 5]); // 4.67
+  await addReviews(photoWalk, [4]); // 4.0
+  await addReviews(nightMarket, [3, 4]); // 3.5
+  // museum day has no reviews
 });
 
 afterAll(async () => {
+  await prisma.review.deleteMany({ where: { customerId: reviewer.id } });
+  await prisma.booking.deleteMany({ where: { customerId: reviewer.id } });
   await prisma.service.deleteMany({ where: { providerId: { in: createdUserIds } } });
   await prisma.category.deleteMany({ where: { id: { in: createdCategoryIds } } });
   await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
@@ -122,9 +163,39 @@ describe("GET /api/services/search with combined filters (US5-2)", () => {
     expect(res.body.meta.totalPages).toBe(3);
   });
 
-  it("leaves out providers without a rating once minRating is set", async () => {
+  it("leaves out services without a review once minRating is set", async () => {
     const { titles } = await search({ interests: CULTURE, minRating: 0 });
     expect(titles).toEqual(["cooking class"]);
+  });
+
+  it("filters by the service's own average, not the provider's", async () => {
+    // Ann's provider avgRating is 1 but her services average 5.0 and 4.67
+    const { titles } = await search({ minRating: 4.5 });
+    expect(titles).toEqual(["cooking class", "temple tour"]);
+    // Cat's provider avgRating is 5 but her only service averages 3.5
+    expect((await search({ minRating: 3.5 })).titles).toContain("night market");
+    expect((await search({ minRating: 3.6 })).titles).not.toContain("night market");
+  });
+
+  it("sorts by the service's own average, with unrated services last", async () => {
+    const { res } = await search({ sortBy: "rating_desc" });
+    expect(res.body.data.map((s) => s.title.replace(`${TITLE_PREFIX} `, ""))).toEqual([
+      "temple tour",
+      "cooking class",
+      "photo walk",
+      "night market",
+      "museum day",
+    ]);
+    expect(res.body.data.map((s) => s.avgRating)).toEqual([5, 4.67, 4, 3.5, null]);
+  });
+
+  it("pages the rating sort in order and keeps totalCount", async () => {
+    const first = await search({ sortBy: "rating_desc", limit: 2, page: 1 });
+    const second = await search({ sortBy: "rating_desc", limit: 2, page: 2 });
+    const names = (r) => r.res.body.data.map((s) => s.title.replace(`${TITLE_PREFIX} `, ""));
+    expect(names(first)).toEqual(["temple tour", "cooking class"]);
+    expect(names(second)).toEqual(["photo walk", "night market"]);
+    expect(first.res.body.meta).toMatchObject({ totalCount: 5, totalPages: 3, currentPage: 1 });
   });
 
   it("includes providers exactly at the age bounds", async () => {

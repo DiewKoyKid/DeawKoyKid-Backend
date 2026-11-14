@@ -70,5 +70,9 @@ it("sweeps only confirmed bookings up to today, and skips ones that haven't star
   expect(prisma.booking.findMany).toHaveBeenCalledWith(expect.objectContaining({
     where: { bookingStatus: "CONFIRMED", appointmentDate: { lte: new Date("2026-10-20T00:00:00Z") } },
   }));
-  expect(prisma.booking.findUnique).toHaveBeenCalledTimes(1);
+  // Only the booking that has started is looked at (startConfirmedBooking and
+  // changeBookingStatus each read it once); the later one is never touched.
+  const lookedUp = prisma.booking.findUnique.mock.calls.map(([args]) => args.where.id);
+  expect(lookedUp).toContain("b-started");
+  expect(lookedUp).not.toContain("b-later");
 });

@@ -147,6 +147,7 @@ describe("GET /api/users/:id public profile (US3-3)", () => {
           profilePhotoUrl: null,
           avgRating: 4,
         },
+        avgRating: 4,
         reviewCount: 1,
       },
     ]);
