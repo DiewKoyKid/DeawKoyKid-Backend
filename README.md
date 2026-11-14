@@ -22,8 +22,8 @@ characters), description (2,000 characters), and status (`PENDING` by default).
 filename, unique durable storage key, MIME type, positive byte size, and upload
 timestamp. File contents are stored separately from the database.
 
-Apply the migration with `npx prisma migrate deploy --config prisma7.config.ts`
-and regenerate the client with `npx prisma generate --config prisma7.config.ts`.
+Apply the migration with `npx prisma migrate deploy --config prisma.config.ts`
+and regenerate the client with `npx prisma generate --config prisma.config.ts`.
 Deleting a complaint cascades to its attachment rows; storage cleanup must also
 remove the actual files. User and booking deletion is restricted while complaints
 reference them.
@@ -35,7 +35,7 @@ Customers can list their complaints at `GET /api/complaints/me`, open one at
 The web app provides **My complaints** and **View reported issues** in My bookings.
 
 To appoint a complaint admin, apply migrations, run
-`npx prisma studio --config prisma7.config.ts`, and set `User.isAdmin` to
+`npx prisma studio --config prisma.config.ts`, and set `User.isAdmin` to
 `true` on the intended active account. Use an individually assigned account
 and verify its user ID before granting access. Set the field back to `false`
 to revoke access. The backend checks the current database value on each
@@ -119,7 +119,7 @@ keep their status.
 The server also checks for expired requests at startup and every minute, so
 unanswered requests expire without a provider action and release their slots.
 Background updates can lag the deadline by one polling interval; provider decisions
-always enforce the cutoff immediately. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
+always enforce the cutoff immediately. Apply migrations with `npx prisma migrate deploy --config prisma.config.ts`
 to add the expiry lookup index.
 
 ## My bookings API
@@ -192,7 +192,7 @@ Errors: `400` for an invalid body or a booking that isn't completed yet, `401`
 without valid authentication, `403` for another customer's booking, `404` for a
 missing booking, and `409` when the booking already has a review. There is no
 payment check because the project has no payment step. Apply migrations with
-`npx prisma migrate deploy --config prisma7.config.ts` to add the one-review-per-booking
+`npx prisma migrate deploy --config prisma.config.ts` to add the one-review-per-booking
 index and the rating check.
 
 ### Provider reviews (US8-2)
@@ -248,7 +248,7 @@ bookings in progress. Afterwards, tokens issued before the deletion return `401`
 
 Email uses `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM`
 (see `.env.example`). Without `SMTP_HOST`, emails are logged to the console
-instead of sent. Apply migrations with `npx prisma migrate deploy --config prisma7.config.ts`
+instead of sent. Apply migrations with `npx prisma migrate deploy --config prisma.config.ts`
 to add `users.deletedAt`.
 
 ## Password reset API
