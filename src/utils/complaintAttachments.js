@@ -1,3 +1,4 @@
+const storage = require('../services/storage.service');
 const fs = require("fs/promises");
 const path = require("path");
 const { randomUUID } = require("crypto");
@@ -41,6 +42,17 @@ async function prepareDirectory(req) {
 async function persistAttachments(req) {
   if (!req.files?.length) return [];
   const folder = randomUUID();
+  if (storage.enabled()) {
+    req.remoteAttachmentKeys = [];
+    const attachments = [];
+    for (const file of req.files) {
+      const key = folder + '/' + file.filename;
+      req.remoteAttachmentKeys.push(key);
+      await storage.upload('complaint-attachments', key, file);
+      attachments.push({ originalName: file.originalname, storageKey: key, mimeType: file.mimetype, sizeBytes: file.size });
+    }
+    return attachments;
+  }
   const destination = path.join(STORAGE_ROOT, folder);
   await fs.rename(req.complaintDirectory, destination);
   req.complaintDirectory = destination;
@@ -53,6 +65,10 @@ async function persistAttachments(req) {
 }
 
 async function cleanupAttachments(req) {
+  if (req.remoteAttachmentKeys?.length) {
+    await storage.remove("complaint-attachments", req.remoteAttachmentKeys);
+    req.remoteAttachmentKeys = [];
+  }
   if (!req.complaintDirectory) return;
   // Only remove this request's server-generated direct child of private storage.
   const directory = path.resolve(req.complaintDirectory);

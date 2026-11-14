@@ -1,3 +1,5 @@
+const storage = require('../services/storage.service');
+const fs = require('node:fs/promises');
 const express = require("express");
 const router = express.Router();
 const upload = require("../middlewares/upload");
@@ -5,7 +7,7 @@ const { authenticateToken } = require("../middlewares/auth.middleware");
 
 // POST /api/upload
 // Expects a form-data field named "image"
-router.post("/", authenticateToken, upload.single("image"), (req, res) => {
+router.post("/", authenticateToken, upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "No image file provided." });
@@ -13,7 +15,7 @@ router.post("/", authenticateToken, upload.single("image"), (req, res) => {
 
     // The public URL to access this image.
     // In local development, the backend serves the /public folder statically.
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const imageUrl = storage.enabled() ? await storage.upload("service-photos", req.file.filename, req.file) : `/uploads/${req.file.filename}`;
     
     return res.status(200).json({ url: imageUrl });
   } catch (err) {

@@ -1,3 +1,4 @@
+const storage = require('../services/storage.service');
 const fs = require("fs/promises");
 const path = require("path");
 const prisma = require("../lib/prisma");
@@ -323,6 +324,7 @@ async function getPublicProfile(req, res, next) {
 // Deletes a stored profile photo. URLs that aren't ours and files that are
 // already gone are ignored: the database is the source of truth.
 async function removeStoredPhoto(url) {
+  if (storage.enabled() && url?.startsWith('https://')) return storage.removePublic(url, 'profile-photos');
   if (!url || !url.startsWith(PROFILE_PHOTO_URL_PREFIX)) return;
   await fs.unlink(path.join(PROFILE_PHOTO_DIR, path.basename(url))).catch(() => {});
 }
@@ -348,6 +350,8 @@ async function uploadMyPhoto(req, res, next) {
     return res.status(400).json({ error: "photo is required" });
   }
   const uploadedPath = req.file.path;
+  let remoteKey;
+  let committed = false;
 
   try {
     if (!(await isJpegOrPng(uploadedPath))) {
@@ -365,9 +369,14 @@ async function uploadMyPhoto(req, res, next) {
       return res.status(404).json({ error: "user not found" });
     }
 
-    const profilePhotoUrl = `${PROFILE_PHOTO_URL_PREFIX}${req.file.filename}`;
+    let profilePhotoUrl = `${PROFILE_PHOTO_URL_PREFIX}${req.file.filename}`;
+    if (storage.enabled()) {
+      remoteKey = req.file.filename;
+      profilePhotoUrl = await storage.upload('profile-photos', remoteKey, req.file);
+    }
     await prisma.user.update({ where: { id: currentUserId }, data: { profilePhotoUrl } });
-    await removeStoredPhoto(existing.profilePhotoUrl);
+    committed = true;
+    await removeStoredPhoto(existing.profilePhotoUrl).catch(() => console.error('Old profile photo cleanup failed'));
 
     return res.status(200).json({ profilePhotoUrl });
   } catch (err) {

@@ -9,7 +9,12 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed:test": "node prisma/seed.test.js",
-    "test:unit:coverage": "jest tests/unit/isUnansweredBookingExpired.test.js --verbose --coverage --collectCoverageFrom=src/utils/bookingStatus.js"
+    "test:unit:coverage": "jest tests/unit/isUnansweredBookingExpired.test.js --verbose --coverage --collectCoverageFrom=src/utils/bookingStatus.js",
+    "db:generate": "prisma generate",
+    "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "bookings:expire": "node scripts/expire-bookings.js"
   },
   "repository": {
     "type": "git",
@@ -31,7 +36,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.4.0",
-    "nodemailer": "^7.0.13",
+    "nodemailer": "^10.5.0",
     "pg": "^8.23.0",
     "socket.io": "^4.8.4"
   },
@@ -50,5 +55,8 @@
       "/node_modules/",
       "<rootDir>/prisma/"
     ]
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
