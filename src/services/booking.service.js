@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma");
+const { notificationsChanged } = require("./notificationEvents");
 const { notifyBookingStatusChange, sendBookingStatusEmails } = require("./notification.service");
 
 const BOOKING_FIELDS = {
@@ -59,6 +60,9 @@ async function applyStatusChange(tx, bookingId, nextStatus, actorId) {
 // including expiry changes that return an HTTP conflict to the caller.
 async function bookingTransaction(run) {
   const result = await prisma.$transaction(run);
+  for (const userId of new Set((result?.notifications || []).map((item) => item.userId))) {
+    notificationsChanged(userId);
+  }
   await sendBookingStatusEmails(result?.notifications);
   return result;
 }

@@ -14,6 +14,10 @@ const request = require("supertest");
 const prisma = require("../src/lib/prisma");
 const { signToken } = require("../src/utils/jwt");
 const notificationRoutes = require("../src/routes/notification.routes");
+const { notificationEvents } = require("../src/services/notificationEvents");
+const changed = jest.fn();
+beforeAll(() => notificationEvents.on("changed", changed));
+afterAll(() => notificationEvents.off("changed", changed));
 
 const app = express();
 app.use(express.json());
@@ -80,6 +84,7 @@ it("marks only the caller's notification as read", async () => {
     data: { isRead: true },
   });
   expect(prisma.notification.findFirst).not.toHaveBeenCalled();
+  expect(changed).toHaveBeenCalledWith("customer-id");
 });
 
 it("is idempotent when an owned notification is already read", async () => {
@@ -102,6 +107,7 @@ it("does not expose another user's notification", async () => {
   const res = await authorizedRequest("patch", "/api/notifications/notification-id/read");
 
   expect(res.status).toBe(404);
+  expect(changed).not.toHaveBeenCalled();
   expect(res.body).toEqual({ error: "Notification not found." });
 });
 
@@ -112,6 +118,7 @@ it("marks all and only the caller's unread notifications as read", async () => {
 
   expect(res.status).toBe(200);
   expect(res.body).toEqual({ updatedCount: 3 });
+  expect(changed).toHaveBeenCalledWith("customer-id");
   expect(prisma.notification.updateMany).toHaveBeenCalledWith({
     where: { userId: "customer-id", isRead: false },
     data: { isRead: true },
