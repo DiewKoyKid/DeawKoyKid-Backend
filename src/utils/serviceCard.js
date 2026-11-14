@@ -38,7 +38,9 @@ function toServiceCard(s) {
     b.reviews.forEach(r => sumRating += r.rating);
   });
 
-  const calculatedAvg = reviewCount > 0 ? sumRating / reviewCount : null;
+  // This service's own average (the service page shows the same number). It is
+  // null until the service has a review.
+  const calculatedAvg = reviewCount > 0 ? Math.round((sumRating / reviewCount) * 100) / 100 : null;
 
   return {
     id: s.id,
@@ -54,6 +56,7 @@ function toServiceCard(s) {
       profilePhotoUrl: s.provider.user.profilePhotoUrl,
       avgRating: s.provider.avgRating ? Number(s.provider.avgRating) : calculatedAvg
     },
+    avgRating: calculatedAvg,
     reviewCount
   };
 }

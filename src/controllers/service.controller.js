@@ -1,3 +1,4 @@
+const { Prisma } = require("@prisma/client");
 const prisma = require("../lib/prisma");
 const {
   BookingStatus,
@@ -286,6 +287,20 @@ function bookableSlots(slots, bookings) {
     })
     .sort((a, b) => `${a.date}T${a.startTime}`.localeCompare(`${b.date}T${b.startTime}`));
 }
+// Average rating of each service's own reviews, as the card and the service
+// page show it. Resolves to a Map of serviceId -> average; services with no
+// review are not in it. With minRating, only services averaging at least that.
+async function serviceAverageRatings({ minRating } = {}) {
+  const having = minRating === undefined ? Prisma.empty : Prisma.sql`HAVING AVG(r."rating") >= ${minRating}`;
+  const rows = await prisma.$queryRaw`
+    SELECT b."serviceId" AS "id", AVG(r."rating")::float8 AS "avg"
+    FROM "reviews" r
+    JOIN "bookings" b ON b."id" = r."bookingId"
+    GROUP BY b."serviceId"
+    ${having}`;
+  return new Map(rows.map((row) => [row.id, row.avg]));
+}
+
 // GET /api/services/search
 async function searchServices(req, res) {
   try {
@@ -345,16 +360,18 @@ async function searchServices(req, res) {
       if (priceMax !== undefined) where.rate.lte = priceMax;
     }
 
-    // Provider filters (gender, age, rating)
+    // Rating filter: the service's own average, like the rating on its card
+    const ratingMin = minRating === undefined || minRating === "" ? undefined : parseFloat(minRating);
+    if (ratingMin !== undefined && Number.isFinite(ratingMin)) {
+      const matching = await serviceAverageRatings({ minRating: ratingMin });
+      where.id = { in: [...matching.keys()] };
+    }
+
+    // Provider filters (gender, age)
     const providerWhere = {};
     const userWhere = {};
     let hasProviderFilter = false;
     let hasUserFilter = false;
-
-    if (minRating) {
-      providerWhere.avgRating = { gte: parseFloat(minRating) };
-      hasProviderFilter = true;
-    }
 
     // The URL uses the stored codes (gender=M|F|O, as in the filter design);
     // the long names are accepted too. Anything else means "any gender".
@@ -410,7 +427,32 @@ async function searchServices(req, res) {
     // Sorting
     let orderBy = {};
     if (sortBy === 'rating_desc') {
-      orderBy = { provider: { avgRating: 'desc' } };
+      // Best-rated service first, by its own average; unrated services last.
+      // Ordered here, not in SQL, because the average is over a relation.
+      const [matches, averages] = await Promise.all([
+        prisma.service.findMany({ where, select: { id: true } }),
+        serviceAverageRatings(),
+      ]);
+      const rank = (id) => averages.get(id) ?? -1;
+      const pageIds = matches
+        .map((m) => m.id)
+        .sort((a, b) => rank(b) - rank(a) || (a < b ? 1 : -1))
+        .slice(skip, skip + limitNum);
+      const pageServices = await prisma.service.findMany({
+        where: { id: { in: pageIds } },
+        select: SERVICE_CARD_SELECT
+      });
+      const byId = new Map(pageServices.map((svc) => [svc.id, svc]));
+
+      return res.status(200).json({
+        data: pageIds.map((id) => toServiceCard(byId.get(id))),
+        meta: {
+          totalCount: matches.length,
+          currentPage: pageNum,
+          totalPages: Math.ceil(matches.length / limitNum),
+          limit: limitNum
+        }
+      });
     } else if (sortBy === 'price_asc') {
       orderBy = { rate: 'asc' };
     } else if (sortBy === 'price_desc') {
