@@ -1,7 +1,7 @@
 # วิธีเปิดโปรเจกต์ (Setup Guide)
 
 ## สิ่งที่ต้องมีก่อน (Prerequisites)
-- Node.js (v18 ขึ้นไป)
+- Node.js (v24)
 - Docker Desktop (ต้องเปิดไว้ก่อนใช้งาน)
 
 ## ขั้นตอน

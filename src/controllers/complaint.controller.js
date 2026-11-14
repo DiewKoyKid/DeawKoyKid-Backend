@@ -1,3 +1,4 @@
+const storage = require('../services/storage.service');
 const { ComplaintCategory } = require("@prisma/client");
 const prisma = require("../lib/prisma");
 const path = require("node:path");
@@ -63,7 +64,8 @@ async function createComplaint(req, res) {
     response = { error: status === 500 ? "Internal server error" : err.message };
     if (status === 500) console.error("createComplaint error:", err);
   } finally {
-    if (!committed || !req.files?.length) {
+    if (committed) req.remoteAttachmentKeys = [];
+    if (storage.enabled() || !committed || !req.files?.length) {
       try {
         await cleanupAttachments(req);
       } catch (err) {
@@ -128,6 +130,7 @@ async function downloadAttachment(req, res, next) {
       select: { originalName: true, storageKey: true },
     });
     if (!file) return res.status(404).json({ error: "Attachment not found" });
+    if (storage.enabled()) return await storage.download('complaint-attachments', file.storageKey, res, file.originalName);
     const filename = path.resolve(STORAGE_ROOT, file.storageKey);
     const relative = path.relative(STORAGE_ROOT, filename);
     if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {

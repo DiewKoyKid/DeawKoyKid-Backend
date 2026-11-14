@@ -17,3 +17,10 @@ public/uploads/*
 postman/
 # Jest coverage reports (npm run test:unit:coverage)
 coverage/
+
+
+.windsurf/
+
+.claude/
+
+.agents/

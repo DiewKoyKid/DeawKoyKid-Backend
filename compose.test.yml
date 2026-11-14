@@ -1,0 +1,39 @@
+services:
+  test-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: local-test-only
+      POSTGRES_DB: backend_test
+    ports:
+      - "127.0.0.1:55433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d backend_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+  migrate:
+    build:
+      context: .
+      target: migration
+    environment:
+      DIRECT_URL: postgresql://test:local-test-only@test-db:5432/backend_test
+    depends_on:
+      test-db:
+        condition: service_healthy
+  api:
+    build:
+      context: .
+      target: runtime
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://test:local-test-only@test-db:5432/backend_test
+      JWT_SECRET: local-test-only-secret
+      STORAGE_DRIVER: local
+      BOOKING_EXPIRY_INLINE: "false"
+      BOOKING_PROGRESS_INLINE: "false"
+    ports:
+      - "127.0.0.1:8082:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

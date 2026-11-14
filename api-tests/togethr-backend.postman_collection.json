@@ -1,0 +1,792 @@
+{
+  "info": {
+    "name": "Togethr Backend API",
+    "description": "Use a disposable demo account. Login stores the token cookie in Postman. Write requests are examples and must be run individually with suitable test data. Run Health and public reads first.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Deployment checks",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /ready",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/ready"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "auth",
+      "item": [
+        {
+          "name": "POST /api/auth/register",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/register",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"REPLACE_USERNAME\",\n  \"email\": \"REPLACE_EMAIL\",\n  \"password\": \"REPLACE_PASSWORD\",\n  \"firstname\": \"Test\",\n  \"lastname\": \"User\",\n  \"consent\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/register/provider",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/register/provider",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/login",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"REPLACE_EMAIL\",\n  \"password\": \"REPLACE_PASSWORD\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/logout",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/forgot-password",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/forgot-password",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/reset-password",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/auth/reset-password",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "user",
+      "item": [
+        {
+          "name": "GET /api/users/me",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/me",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "PUT /api/users/me",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/users/me",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/users/me",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/users/me",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "POST /api/users/me/provider",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/users/me/provider",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "PUT /api/users/me/photo",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/users/me/photo",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/users/me/photo",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/users/me/photo",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/users/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/users/{{id}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        }
+      ]
+    },
+    {
+      "name": "provider",
+      "item": [
+        {
+          "name": "GET /api/providers/me/services",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/providers/me/services",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/providers/me/services/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/providers/me/services/{{id}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/providers/me/services/:id/availability",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/providers/me/services/{{id}}/availability",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "PUT /api/providers/me/services/:id/availability",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/providers/me/services/{{id}}/availability",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/providers/me/booking-requests",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/providers/me/booking-requests",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/providers/:id/reviews",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/providers/{{id}}/reviews",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        }
+      ]
+    },
+    {
+      "name": "service",
+      "item": [
+        {
+          "name": "POST /api/services",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/services",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "POST /api/services/:id/availability",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/services/{{id}}/availability",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "PUT /api/services/:id/availability",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/services/{{id}}/availability",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/services/search",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/services/search",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/services/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/services/{{id}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "PUT /api/services/:id",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/services/{{id}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/services/:id/status",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/services/{{id}}/status",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "booking",
+      "item": [
+        {
+          "name": "GET /api/bookings/me",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/bookings/me",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "POST /api/bookings",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/bookings",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/bookings/:id/status",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/bookings/{{id}}/status",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/bookings/:id/cancel",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/bookings/{{id}}/cancel",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/bookings/:id/complete",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/bookings/{{id}}/complete",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/bookings/:id/messages",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/bookings/{{id}}/messages",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "POST /api/bookings/:id/messages/image",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/bookings/{{id}}/messages/image",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/bookings/:id/messages/:messageId/image",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/bookings/{{id}}/messages/{{messageId}}/image",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        }
+      ]
+    },
+    {
+      "name": "upload",
+      "item": [
+        {
+          "name": "POST /api/upload",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/upload",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "category",
+      "item": [
+        {
+          "name": "GET /api/categories",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/categories",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        }
+      ]
+    },
+    {
+      "name": "notification",
+      "item": [
+        {
+          "name": "GET /api/notifications/settings",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/notifications/settings",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "PATCH /api/notifications/settings",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/notifications/settings",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/notifications",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/notifications",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "PATCH /api/notifications/read-all",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/notifications/read-all",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/notifications/:id/read",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/notifications/{{id}}/read",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "item": [
+        {
+          "name": "POST /api/reviews",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/reviews",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "complaint",
+      "item": [
+        {
+          "name": "POST /api/complaints",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/complaints",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "attachments",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/complaints/me",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/complaints/me",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/complaints/admin",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/complaints/admin",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/complaints/admin/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/complaints/admin/{{id}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "PATCH /api/complaints/admin/:id",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/api/complaints/admin/{{id}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations.",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "GET /api/complaints/admin/:id/attachments/:attachmentId",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/complaints/admin/{{id}}/attachments/{{attachmentId}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/complaints/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/complaints/{{id}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        },
+        {
+          "name": "GET /api/complaints/:id/attachments/:attachmentId",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/complaints/{{id}}/attachments/{{attachmentId}}",
+            "description": "Review required fields and permissions in the API before sending. Use disposable test data for mutations."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://togethr-backend-881996648465.asia-southeast1.run.app"
+    },
+    {
+      "key": "id",
+      "value": "REPLACE_id"
+    },
+    {
+      "key": "messageId",
+      "value": "REPLACE_messageId"
+    },
+    {
+      "key": "attachmentId",
+      "value": "REPLACE_attachmentId"
+    }
+  ]
+}

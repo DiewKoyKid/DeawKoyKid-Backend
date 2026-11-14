@@ -32,6 +32,15 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get('/ready', async (req, res) => {
+  let timer;
+  try {
+    await Promise.race([require('./lib/prisma').$queryRaw`SELECT 1`, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('timeout')), 3000); })]);
+    res.json({ status: 'ready' });
+  } catch { res.status(503).json({ status: 'unavailable' }); }
+  finally { clearTimeout(timer); }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use('/api/providers', providerRoutes);
