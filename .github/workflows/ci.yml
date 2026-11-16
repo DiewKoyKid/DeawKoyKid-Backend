@@ -2,11 +2,13 @@ name: Backend CI
 on:
   pull_request:
   push:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -37,50 +39,3 @@ jobs:
       - run: npm audit --audit-level=high
       - run: docker build --target runtime -t backend:test .
       - run: docker build --target migration -t backend-migration:test .
-  deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: test
-    runs-on: ubuntu-latest
-    concurrency:
-      group: backend-production
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      PROJECT_ID: project-fd26c589-9a13-42d1-868
-      REGION: asia-southeast1
-      IMAGE: asia-southeast1-docker.pkg.dev/project-fd26c589-9a13-42d1-868/togethr-backend/api
-    steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v3
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          workload_identity_provider: projects/881996648465/locations/global/workloadIdentityPools/github/providers/sunvat-backend
-          service_account: github-deployer@project-fd26c589-9a13-42d1-868.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v2
-      - name: Configure registry authentication
-        run: gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
-      - name: Build and push both image targets
-        run: |
-          docker build --target runtime -t "$IMAGE:$GITHUB_SHA" .
-          docker build --target migration -t "$IMAGE:migration-$GITHUB_SHA" .
-          docker push "$IMAGE:$GITHUB_SHA"
-          docker push "$IMAGE:migration-$GITHUB_SHA"
-          echo "RUNTIME_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:$GITHUB_SHA")" >> "$GITHUB_ENV"
-          echo "MIGRATION_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE:migration-$GITHUB_SHA")" >> "$GITHUB_ENV"
-      - name: Migrate database
-        run: |
-          gcloud run jobs deploy togethr-migrate \
-            --image="$MIGRATION_DIGEST" --region="$REGION" --project="$PROJECT_ID" \
-            --service-account="migration-runner@$PROJECT_ID.iam.gserviceaccount.com" \
-            --set-secrets="DIRECT_URL=togethr-direct-url:1" \
-            --max-retries=0 --tasks=1 --quiet
-          gcloud run jobs execute togethr-migrate --wait --region="$REGION" --project="$PROJECT_ID" --quiet
-      - name: Deploy verified image
-        run: |
-          gcloud run deploy togethr-backend --image="$RUNTIME_DIGEST" \
-            --region="$REGION" --project="$PROJECT_ID" --quiet
-          SERVICE_URL=$(gcloud run services describe togethr-backend --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)')
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$SERVICE_URL/health"
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 "$SERVICE_URL/ready"
