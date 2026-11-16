@@ -1,4 +1,7 @@
 .git
+.worktrees
+.agents
+.codex
 node_modules
 .env
 .env.*
@@ -6,3 +9,5 @@ tests
 storage
 coverage
 public/uploads/profile-photos
+public/uploads/*
+!public/uploads/services-cover-photo

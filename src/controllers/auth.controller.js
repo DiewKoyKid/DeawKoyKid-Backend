@@ -1,6 +1,7 @@
 const prisma = require("../lib/prisma");
 const { hashPassword, comparePassword } = require("../utils/hash");
 const { signToken } = require("../utils/jwt");
+const { authCookieOptions } = require("../utils/authCookie");
 const { rolesFor } = require("../utils/roles");
 const {
     createResetToken,
@@ -346,9 +347,7 @@ async function login(req, res, next) {
         const token = signToken({ userId: user.id });
 
         res.cookie(COOKIE_NAME, token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            ...authCookieOptions(),
             maxAge: COOKIE_MAX_AGE_MS,
         });
 
@@ -370,11 +369,7 @@ async function login(req, res, next) {
 
 // Also used by account deletion (DELETE /api/users/me) to sign the user out
 function clearAuthCookie(res) {
-    res.clearCookie(COOKIE_NAME, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-    });
+    res.clearCookie(COOKIE_NAME, authCookieOptions());
 }
 
 function logout(req, res) {
