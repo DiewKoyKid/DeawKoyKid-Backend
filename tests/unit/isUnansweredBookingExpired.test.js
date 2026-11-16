@@ -1,6 +1,6 @@
 // Unit test for the 24-hour expiry rule (F48), for the test plan's coverage demo.
 // Pure function: no database, no app. Run with `npm run test:unit:coverage`.
-const { isUnansweredBookingExpired } = require("../../src/utils/bookingStatus");
+const { isUnansweredBookingExpired } = require("../../src/utils/bookingExpiry");
 
 const now = Date.parse("2026-11-17T12:00:00Z");
 
