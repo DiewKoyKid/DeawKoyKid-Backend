@@ -24,6 +24,7 @@ app.use(
 );
 app.use(express.json());
 app.use(cookieParser());
+app.use(require('./docs/router'));
 
 // Serve static files from the public folder
 app.use("/uploads", express.static(path.join(__dirname, "../public/uploads")));

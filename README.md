@@ -362,3 +362,8 @@ Deploy โดยเชื่อม GitHub กับ Render และให้ Re
    ```
 
 ดูขั้นตอนที่เหลือ (ติดตั้ง dependencies, ตั้งค่า `.env`, เปิด PostgreSQL, รัน migration, สตาร์ทเซิร์ฟเวอร์) ได้ที่ [SETUP.md](./SETUP.md)
+
+## API documentation
+
+Swagger UI is available at `/api-docs/` and the OpenAPI document at `/openapi.json`.
+See [API_DOCS.md](API_DOCS.md) for login, local usage, and contract maintenance.
