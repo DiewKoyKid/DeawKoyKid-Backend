@@ -32,13 +32,6 @@ const COMPLETABLE_STATUSES = [
   BookingStatus.IN_PROGRESS,
 ];
 
-const BOOKING_RESPONSE_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-function isUnansweredBookingExpired(booking, now = Date.now()) {
-  return booking.bookingStatus === BookingStatus.WAITING_FOR_CONFIRMATION &&
-    booking.createdAt.getTime() + BOOKING_RESPONSE_WINDOW_MS <= now;
-}
-
 // When the booked time begins, in the server's timezone (the same one used for
 // "today" when booking). A booking without a slot starts at midnight that day.
 function bookingStartsAt({ appointmentDate, startTime }) {
@@ -78,11 +71,20 @@ module.exports = {
   SLOT_HOLDING_STATUSES,
   ACTIVE_BOOKING_STATUSES,
   COMPLETABLE_STATUSES,
-  BOOKING_RESPONSE_WINDOW_MS,
-  isUnansweredBookingExpired,
   bookingStartsAt,
   hasBookingStarted,
   bookingEndsAt,
   hasBookingEnded,
   canCompleteBooking,
 };
+
+// The expiry rule lives in bookingExpiry.js, which imports BookingStatus from this
+// file. It is re-exported here so existing imports keep working. The two files
+// import each other, so the re-exports are getters: they read bookingExpiry.js
+// when used, not while this file loads, which works whichever file loads first.
+for (const name of ["BOOKING_RESPONSE_WINDOW_MS", "isUnansweredBookingExpired"]) {
+  Object.defineProperty(module.exports, name, {
+    enumerable: true,
+    get: () => require("./bookingExpiry")[name],
+  });
+}
