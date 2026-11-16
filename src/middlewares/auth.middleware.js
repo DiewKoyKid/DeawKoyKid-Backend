@@ -16,6 +16,10 @@ async function authenticateToken(req, res, next) {
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+  // Socket handshake tokens (GET /api/auth/socket-token) are not REST sessions.
+  if (decoded.purpose) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
 
   try {
     // Tokens live 30 minutes, so one issued before the account was deleted

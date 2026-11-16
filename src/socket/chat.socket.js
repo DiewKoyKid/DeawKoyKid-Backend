@@ -23,6 +23,7 @@ function readCookie(header, name) {
 }
 
 const roomFor = (bookingId) => `booking:${bookingId}`;
+const asObject = (value) => (value && typeof value === "object" ? value : {});
 
 async function authenticateSocket(socket, next) {
   const token =
@@ -51,7 +52,10 @@ function errorAck(ack, err) {
 function registerChatHandlers(io, socket) {
   const { userId } = socket.data;
 
-  socket.on("chat:join", async ({ bookingId } = {}, ack) => {
+  // Payloads come straight from the client: `null` or a string must not reach
+  // a destructuring pattern, or the rejection/throw would crash the process.
+  socket.on("chat:join", async (payload, ack) => {
+    const { bookingId } = asObject(payload);
     try {
       await getChatAccess(bookingId, userId);
       await socket.join(roomFor(bookingId));
@@ -61,11 +65,13 @@ function registerChatHandlers(io, socket) {
     }
   });
 
-  socket.on("chat:leave", ({ bookingId } = {}) => {
+  socket.on("chat:leave", (payload) => {
+    const { bookingId } = asObject(payload);
     if (bookingId) socket.leave(roomFor(bookingId));
   });
 
-  socket.on("chat:message", async ({ bookingId, content } = {}, ack) => {
+  socket.on("chat:message", async (payload, ack) => {
+    const { bookingId, content } = asObject(payload);
     try {
       // Checked on every message: the booking may have been cancelled or
       // completed since the user joined.

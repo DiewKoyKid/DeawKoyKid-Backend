@@ -372,6 +372,18 @@ function clearAuthCookie(res) {
     res.clearCookie(COOKIE_NAME, authCookieOptions());
 }
 
+// The frontend reaches the REST API through its own origin (a Vercel rewrite),
+// so the session cookie is first-party and never visible to the API host.
+// Socket.IO connects to the API host directly, so it authenticates with this
+// short-lived token in the handshake instead of the cookie.
+const SOCKET_TOKEN_TTL = "2m";
+
+function socketToken(req, res) {
+    const token = signToken({ userId: req.user.userId, purpose: "socket" }, SOCKET_TOKEN_TTL);
+    res.set("Cache-Control", "no-store");
+    return res.status(200).json({ token });
+}
+
 function logout(req, res) {
     clearAuthCookie(res);
 
@@ -459,6 +471,7 @@ module.exports = {
     registerProvider,
     login,
     logout,
+    socketToken,
     forgotPassword,
     resetPassword,
     clearAuthCookie,
