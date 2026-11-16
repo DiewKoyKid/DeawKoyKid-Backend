@@ -1,0 +1,2002 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Togethr API",
+    "description": "REST API for authentication, user profiles, and booking complaints.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080/api",
+      "description": "Local development server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Registration and authentication"
+    },
+    {
+      "name": "Users",
+      "description": "User profile management"
+    },
+    {
+      "name": "Complaints",
+      "description": "Booking complaints"
+    }
+  ],
+  "paths": {
+    "/complaints": {
+      "post": {
+        "tags": [
+          "Complaints"
+        ],
+        "operationId": "submitComplaint",
+        "summary": "Submit a complaint about the signed-in customer's booking",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "bookingId",
+                  "category",
+                  "subject",
+                  "description"
+                ],
+                "properties": {
+                  "bookingId": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "$ref": "#/components/schemas/ComplaintCategory"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "maxItems": 5,
+                    "description": "Nonempty JPG, PNG, or PDF files, up to 10 MiB each.",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Complaint submitted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "complaint"
+                  ],
+                  "properties": {
+                    "complaint": {
+                      "$ref": "#/components/schemas/Complaint"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "The booking belongs to another customer"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "description": "An attachment exceeds 10 MiB"
+          },
+          "415": {
+            "description": "Request content type must be multipart/form-data"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/complaints/me": {
+      "get": {
+        "tags": [
+          "Complaints"
+        ],
+        "operationId": "listMyComplaints",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complaint list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "complaints"
+                  ],
+                  "properties": {
+                    "complaints": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ComplaintSummary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/complaints/admin": {
+      "get": {
+        "tags": [
+          "Complaints"
+        ],
+        "operationId": "listAdminComplaints",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complaint list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "complaints"
+                  ],
+                  "properties": {
+                    "complaints": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ComplaintSummary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/complaints/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Complaints"
+        ],
+        "operationId": "getMyComplaint",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complaint details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "complaint"
+                  ],
+                  "properties": {
+                    "complaint": {
+                      "$ref": "#/components/schemas/ComplaintDetails"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/complaints/admin/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Complaints"
+        ],
+        "operationId": "getAdminComplaint",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complaint details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "complaint"
+                  ],
+                  "properties": {
+                    "complaint": {
+                      "$ref": "#/components/schemas/ComplaintDetails"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Complaints"
+        ],
+        "operationId": "updateAdminComplaint",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "expectedStatus",
+                  "expectedUpdatedAt",
+                  "status",
+                  "adminReply"
+                ],
+                "properties": {
+                  "expectedStatus": {
+                    "$ref": "#/components/schemas/ComplaintStatus"
+                  },
+                  "expectedUpdatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/ComplaintStatus"
+                  },
+                  "adminReply": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Complaint updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "complaint"
+                  ],
+                  "properties": {
+                    "complaint": {
+                      "$ref": "#/components/schemas/ComplaintDetails"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Complaint was changed by another reviewer"
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "register",
+        "summary": "Register a customer account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/auth/register/provider": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "registerProvider",
+        "summary": "Register a provider account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterProviderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Provider account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterProviderResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "login",
+        "summary": "Log in with an email and password",
+        "description": "Sets an HttpOnly `token` cookie when authentication succeeds. The 5th wrong password in a row locks the account for 15 minutes (US1-3); unknown and deleted accounts are never locked.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "headers": {
+              "Set-Cookie": {
+                "description": "HttpOnly JWT session cookie",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "423": {
+            "description": "Account locked: \"invalid email or password; the account is locked for 15 minutes\" on the 5th failure, then \"this account is temporarily locked; try again later\" until the lock ends",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "logout",
+        "summary": "Log out and clear the session cookie",
+        "responses": {
+          "200": {
+            "description": "Logged out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/auth/forgot-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "forgotPassword",
+        "summary": "Email a password reset link",
+        "description": "Emails a one-time reset link (valid for 15 minutes) to a registered\naccount. Always answers 200 with the same message, whether or not the\nemail is registered.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Request accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/auth/reset-password": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "resetPassword",
+        "summary": "Set a new password with a reset token",
+        "description": "The token comes from the emailed link and works once. An unknown,\nexpired or used token returns 400 and the password is not changed.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "getMyProfile",
+        "summary": "Get the authenticated user's full profile",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "updateMyProfile",
+        "summary": "Update the authenticated user's profile",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "deleteMyAccount",
+        "summary": "Delete the signed-in user's account (US2-3)",
+        "description": "Re-authenticates with the password, then deactivates the account and anonymises its personal data, emails a confirmation and clears the session cookie. Refused with 409 while the user has a booking in progress, as the customer or as the provider of the booked service.\n",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account deleted and session cookie cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteAccountResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "description": "Wrong password ({ \"error\": \"incorrect password\" }) or not authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "The user has bookings in progress; nothing was changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveBookingsResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/users/me/provider": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "addProviderProfile",
+        "summary": "Add a provider profile to the signed-in account",
+        "description": "Lets an existing account also become a provider, instead of registering a second account.",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddProviderProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Provider profile added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/users/me/photo": {
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "uploadMyPhoto",
+        "summary": "Set or replace the signed-in user's profile photo",
+        "description": "Customers and providers alike. JPG or PNG, at most 5 MB. The previous photo is deleted.",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "photo"
+                ],
+                "properties": {
+                  "photo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Photo saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePhotoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "deleteMyPhoto",
+        "summary": "Remove the signed-in user's profile photo",
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Photo removed (profilePhotoUrl is null)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfilePhotoResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "getPublicProfile",
+        "summary": "Get a user's public profile",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicProfileResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieAuth": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "token"
+      },
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid request",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Authentication failed or is required",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Resource already exists",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Unexpected server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ComplaintCategory": {
+        "type": "string",
+        "enum": [
+          "PAYMENT",
+          "CANCELLATION_OR_REFUND",
+          "PROVIDER_NO_SHOW",
+          "SERVICE_NOT_AS_DESCRIBED",
+          "OTHER"
+        ]
+      },
+      "ComplaintStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "IN_PROGRESS",
+          "RESOLVED",
+          "CLOSED"
+        ]
+      },
+      "ComplaintSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "bookingId",
+          "category",
+          "subject",
+          "status",
+          "createdAt",
+          "booking"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "bookingId": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ComplaintCategory"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "booking": {
+            "type": "object",
+            "required": [
+              "service"
+            ],
+            "properties": {
+              "service": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ComplaintDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Complaint"
+          },
+          {
+            "$ref": "#/components/schemas/ComplaintSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "adminReply"
+            ],
+            "properties": {
+              "adminReply": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "Complaint": {
+        "type": "object",
+        "required": [
+          "id",
+          "bookingId",
+          "category",
+          "subject",
+          "description",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "attachments"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "bookingId": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ComplaintCategory"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComplaintStatus"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "originalName",
+                "mimeType",
+                "sizeBytes"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "originalName": {
+                  "type": "string"
+                },
+                "mimeType": {
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Gender": {
+        "type": "string",
+        "enum": [
+          "M",
+          "F",
+          "O"
+        ]
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "CUSTOMER",
+          "PROVIDER",
+          "ADMIN"
+        ],
+        "description": "A profile the account holds."
+      },
+      "BaseRegistrationFields": {
+        "type": "object",
+        "required": [
+          "username",
+          "email",
+          "password",
+          "firstname",
+          "lastname",
+          "consent"
+        ],
+        "properties": {
+          "consent": {
+            "type": "boolean",
+            "description": "Must be true — confirms the user has read and agreed to the Privacy Policy."
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8
+          },
+          "firstname": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "lastname": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "bdate": {
+            "type": "string",
+            "format": "date"
+          },
+          "bankAccount": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "phoneNumber": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "instagram": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "line": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "facebook": {
+            "type": "string",
+            "maxLength": 40
+          }
+        }
+      },
+      "RegisterRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseRegistrationFields"
+          }
+        ]
+      },
+      "RegisterProviderRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseRegistrationFields"
+          },
+          {
+            "type": "object",
+            "required": [
+              "idCard"
+            ],
+            "properties": {
+              "idCard": {
+                "type": "string",
+                "pattern": "^[0-9]{13}$"
+              },
+              "bio": {
+                "type": "string"
+              },
+              "languages": {
+                "type": "string",
+                "maxLength": 200
+              },
+              "emergencyContactName": {
+                "type": "string",
+                "maxLength": 80
+              },
+              "emergencyContactPhone": {
+                "type": "string",
+                "maxLength": 20
+              }
+            }
+          }
+        ]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "Supply either an email or a username, along with the password.",
+        "required": [
+          "password"
+        ],
+        "anyOf": [
+          {
+            "required": [
+              "email"
+            ]
+          },
+          {
+            "required": [
+              "username"
+            ]
+          }
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "username": {
+            "type": "string",
+            "maxLength": 50
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "AuthUser": {
+        "type": "object",
+        "required": [
+          "id",
+          "username",
+          "email",
+          "firstname",
+          "lastname"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          },
+          "firstname": {
+            "type": "string"
+          },
+          "lastname": {
+            "type": "string"
+          },
+          "profilePhotoUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Path on the API server, e.g. /uploads/profile-photos/abc.jpg (null when none).",
+            "example": "/uploads/profile-photos/3f2b-1728540000000-12345.jpg"
+          }
+        }
+      },
+      "RegisteredUser": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AuthUser"
+          },
+          {
+            "type": "object",
+            "required": [
+              "createdAt"
+            ],
+            "properties": {
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        ]
+      },
+      "ProviderRegistrationDetails": {
+        "type": "object",
+        "properties": {
+          "idCard": {
+            "type": "string",
+            "nullable": true
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "languages": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "RegisteredProviderUser": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RegisteredUser"
+          },
+          {
+            "type": "object",
+            "required": [
+              "provider"
+            ],
+            "properties": {
+              "provider": {
+                "$ref": "#/components/schemas/ProviderRegistrationDetails"
+              }
+            }
+          }
+        ]
+      },
+      "RegisterResponse": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/RegisteredUser"
+          }
+        }
+      },
+      "RegisterProviderResponse": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/RegisteredProviderUser"
+          }
+        }
+      },
+      "AuthenticatedUser": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AuthUser"
+          },
+          {
+            "type": "object",
+            "required": [
+              "roles"
+            ],
+            "properties": {
+              "roles": {
+                "type": "array",
+                "description": "Every profile this account holds. An account can be both a customer and a provider.",
+                "items": {
+                  "$ref": "#/components/schemas/UserRole"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/AuthenticatedUser"
+          }
+        }
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "logged out"
+          }
+        }
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "customer@example.com"
+          }
+        }
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "required": [
+          "token",
+          "password"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The token from the emailed reset link"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 8
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "DeleteAccountRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        }
+      },
+      "DeleteAccountResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "account deleted"
+          }
+        }
+      },
+      "ActiveBooking": {
+        "type": "object",
+        "required": [
+          "id",
+          "bookingStatus",
+          "appointmentDate",
+          "service"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "bookingStatus": {
+            "type": "string",
+            "description": "WAITING_FOR_CONFIRMATION or CONFIRMED (IN_PROGRESS once US6-5 adds it)",
+            "example": "CONFIRMED"
+          },
+          "appointmentDate": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-11-05"
+          },
+          "service": {
+            "type": "object",
+            "required": [
+              "title"
+            ],
+            "properties": {
+              "title": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ActiveBookingsResponse": {
+        "type": "object",
+        "required": [
+          "error",
+          "bookings"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "bookings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActiveBooking"
+            }
+          }
+        }
+      },
+      "AddProviderProfileRequest": {
+        "type": "object",
+        "required": [
+          "idCard"
+        ],
+        "properties": {
+          "idCard": {
+            "type": "string",
+            "pattern": "^[0-9]{13}$"
+          },
+          "bio": {
+            "type": "string"
+          },
+          "languages": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "emergencyContactName": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "emergencyContactPhone": {
+            "type": "string",
+            "maxLength": 20
+          }
+        }
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "firstname": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "lastname": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "bdate": {
+            "type": "string",
+            "format": "date"
+          },
+          "bankAccount": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "phoneNumber": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "instagram": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "line": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "facebook": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "bio": {
+            "type": "string"
+          },
+          "languages": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "ProviderProfile": {
+        "type": "object",
+        "properties": {
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "languages": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "UserProfile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AuthUser"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "gender": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/Gender"
+                  }
+                ],
+                "nullable": true
+              },
+              "bdate": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "bankAccount": {
+                "type": "string",
+                "nullable": true
+              },
+              "phoneNumber": {
+                "type": "string",
+                "nullable": true
+              },
+              "instagram": {
+                "type": "string",
+                "nullable": true
+              },
+              "line": {
+                "type": "string",
+                "nullable": true
+              },
+              "facebook": {
+                "type": "string",
+                "nullable": true
+              },
+              "provider": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ProviderProfile"
+                  }
+                ],
+                "nullable": true
+              }
+            }
+          }
+        ]
+      },
+      "ProfileResponse": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserProfile"
+          }
+        }
+      },
+      "PublicProviderProfile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProviderProfile"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "avgRating": {
+                "type": "string",
+                "nullable": true,
+                "example": "4.75"
+              }
+            }
+          }
+        ]
+      },
+      "PublicUserProfile": {
+        "type": "object",
+        "description": "Public fields only. email, gender, bdate, phoneNumber, bankAccount and the provider's idCard and emergency contact are never returned. reviews and services are present only when the user is a provider.",
+        "required": [
+          "id",
+          "username",
+          "firstname",
+          "lastname"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "firstname": {
+            "type": "string"
+          },
+          "lastname": {
+            "type": "string"
+          },
+          "profilePhotoUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Path on the API server, e.g. /uploads/profile-photos/abc.jpg (null when none)."
+          },
+          "instagram": {
+            "type": "string",
+            "nullable": true
+          },
+          "line": {
+            "type": "string",
+            "nullable": true
+          },
+          "facebook": {
+            "type": "string",
+            "nullable": true
+          },
+          "provider": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PublicProviderProfile"
+              }
+            ],
+            "nullable": true
+          },
+          "reviews": {
+            "type": "array",
+            "description": "Reviews on all of the provider's services, newest first. Providers only.",
+            "items": {
+              "$ref": "#/components/schemas/PublicReview"
+            }
+          },
+          "services": {
+            "type": "array",
+            "description": "The provider's published services, in the search result shape. Providers only.",
+            "items": {
+              "$ref": "#/components/schemas/ServiceCard"
+            }
+          }
+        }
+      },
+      "PublicReview": {
+        "type": "object",
+        "required": [
+          "id",
+          "author",
+          "rating",
+          "comment",
+          "date",
+          "serviceTitle"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string",
+            "description": "The reviewer's first name only"
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "serviceTitle": {
+            "type": "string"
+          }
+        }
+      },
+      "ServiceCard": {
+        "type": "object",
+        "description": "One service as GET /api/services/search returns it.",
+        "required": [
+          "id",
+          "title",
+          "location",
+          "rate",
+          "rateUnit",
+          "coverPhotoUrl",
+          "provider",
+          "reviewCount"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "rate": {
+            "type": "number"
+          },
+          "rateUnit": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverPhotoUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "provider": {
+            "type": "object",
+            "required": [
+              "id",
+              "firstname",
+              "lastname",
+              "profilePhotoUrl",
+              "avgRating"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "firstname": {
+                "type": "string"
+              },
+              "lastname": {
+                "type": "string"
+              },
+              "profilePhotoUrl": {
+                "type": "string",
+                "nullable": true
+              },
+              "avgRating": {
+                "type": "number",
+                "nullable": true,
+                "description": "The provider's average over all their services."
+              }
+            }
+          },
+          "avgRating": {
+            "type": "number",
+            "nullable": true,
+            "description": "Average rating of this service's own reviews; null when it has none."
+          },
+          "reviewCount": {
+            "type": "integer",
+            "description": "Number of reviews on this service."
+          }
+        }
+      },
+      "ProfilePhotoResponse": {
+        "type": "object",
+        "required": [
+          "profilePhotoUrl"
+        ],
+        "properties": {
+          "profilePhotoUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PublicProfileResponse": {
+        "type": "object",
+        "required": [
+          "user"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/PublicUserProfile"
+          }
+        }
+      }
+    }
+  }
+}
