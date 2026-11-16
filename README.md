@@ -346,6 +346,9 @@ backend running.
 
 ## 🚀 Getting Started
 
+Deploy โดยเชื่อม GitHub กับ Render และให้ Render build Dockerfile อัตโนมัติ:
+ดู [DEPLOY_RENDER.md](./DEPLOY_RENDER.md)
+
 ### Prerequisites
 * Node.js (v18.x หรือสูงกว่า)
 * Docker Desktop (ใช้รัน PostgreSQL ผ่าน Docker Compose — ต้องเปิดไว้ก่อนใช้งาน)

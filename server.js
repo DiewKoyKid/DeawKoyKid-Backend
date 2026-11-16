@@ -1,4 +1,6 @@
 require("dotenv").config();
+// Fail before listening if the deployment's cookie configuration is invalid.
+require("./src/utils/authCookie").authCookieOptions();
 if (process.env.NODE_ENV === "production") {
   for (const key of ["DATABASE_URL", "JWT_SECRET", "CORS_ORIGIN", "FRONTEND_URL", "SMTP_HOST"]) {
     if (!process.env[key]) throw new Error("Missing required environment variable: " + key);

@@ -1,0 +1,46 @@
+# Create via Render > New > Blueprint. Review paid plan before deploying.
+services:
+  - type: web
+    name: togethr-backend
+    runtime: docker
+    plan: 0.5c-512mb
+    region: singapore
+    branch: main
+    autoDeployTrigger: commit
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    numInstances: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TZ
+        value: Asia/Bangkok
+      - key: AUTH_COOKIE_SAME_SITE
+        value: none
+      - key: AUTH_COOKIE_PARTITIONED
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: BOOKING_EXPIRY_INLINE
+        value: "true"
+      - key: BOOKING_PROGRESS_INLINE
+        value: "true"
+      - key: DB_POOL_MAX
+        value: "5"

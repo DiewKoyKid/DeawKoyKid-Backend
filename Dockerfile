@@ -1,3 +1,5 @@
+# Render builds this file from the linked GitHub branch; no image push is needed.
+# Migrations run separately using the migration target or a local checkout.
 FROM node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS dependencies
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
