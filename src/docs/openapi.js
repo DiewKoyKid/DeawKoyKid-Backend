@@ -55,6 +55,9 @@ const serviceInput = obj({
 }, ['title', 'location', 'rate', 'startTime', 'endTime']);
 spec.components.schemas.ServiceInput = serviceInput;
 const serviceResult = obj({ service: freeObject });
+operation('/auth/socket-token', 'get', 'Auth', 'Get a 2-minute token for the Socket.IO handshake (auth.token)', {
+  result: obj({ token: str }, ['token']), errorCodes: [401, 500],
+});
 operation('/services', 'post', 'Services', 'Create a service (provider)', { body: ref('ServiceInput'), result: serviceResult, status: 201 });
 operation('/services/{id}', 'put', 'Services', 'Update your service', { body: ref('ServiceInput'), result: serviceResult });
 operation('/services/{id}', 'get', 'Services', 'Read a published service', { public: true, errorCodes: [404, 410, 500] });

@@ -11,6 +11,8 @@ const prisma = require("./src/lib/prisma");
 const { startBookingExpiryJob } = require("./src/jobs/bookingExpiry.job");
 const { startBookingProgressJob } = require("./src/jobs/bookingProgress.job");
 const { attachChat } = require("./src/socket/chat.socket");
+// One instance serves everyone: log a stray rejection instead of exiting.
+process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err));
 const PORT = process.env.PORT || 8080;
 const server = app.listen(PORT, "0.0.0.0", () => console.log("Server listening on port " + PORT));
 const io = attachChat(server);

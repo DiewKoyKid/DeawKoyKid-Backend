@@ -16,10 +16,12 @@ services:
         value: production
       - key: TZ
         value: Asia/Bangkok
+      # The frontend proxies /api through its own origin (vercel.json), so the
+      # cookie is first-party. Cross-site cookies are blocked on iOS/Safari.
       - key: AUTH_COOKIE_SAME_SITE
-        value: none
+        value: lax
       - key: AUTH_COOKIE_PARTITIONED
-        value: "true"
+        value: "false"
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

@@ -8,8 +8,8 @@ if (!JWT_SECRET) {
   console.warn("WARNING: JWT_SECRET is not set in .env — auth will not be secure.");
 }
 
-function signToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+function signToken(payload, expiresIn = JWT_EXPIRES_IN) {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn });
 }
 
 function verifyToken(token) {
